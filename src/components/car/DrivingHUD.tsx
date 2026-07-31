@@ -6,7 +6,7 @@ type Props = {
   status: CarStatus;
   throttle: number;
   steering: number;
-  recording?: boolean;
+  recording?: boolean | undefined;
 };
 
 function Bar({ value, label }: { value: number; label: string }) {

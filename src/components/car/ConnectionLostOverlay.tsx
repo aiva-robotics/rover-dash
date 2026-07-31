@@ -3,7 +3,7 @@ import { TriangleAlert } from "lucide-react";
 type Props = {
   visible: boolean;
   reason: "connection" | "estop";
-  onReset?: () => void;
+  onReset?: (() => void) | undefined;
 };
 
 export function ConnectionLostOverlay({ visible, reason, onReset }: Props) {

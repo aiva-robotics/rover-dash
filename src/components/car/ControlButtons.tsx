@@ -2,7 +2,7 @@ import { Camera, Lightbulb, OctagonAlert, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   headlights: boolean;
   onToggleLights: () => void;
   onHorn: () => void;
@@ -20,8 +20,8 @@ function ActionButton({
 }: {
   icon: React.ReactNode;
   label: string;
-  active?: boolean;
-  disabled?: boolean;
+  active?: boolean | undefined;
+  disabled?: boolean | undefined;
   onClick: () => void;
 }) {
   return (

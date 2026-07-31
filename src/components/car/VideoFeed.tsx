@@ -4,7 +4,7 @@ import { Camera, Maximize2, Minimize2 } from "lucide-react";
 type Props = {
   src: string;
   online: boolean;
-  children?: ReactNode;
+  children?: ReactNode | undefined;
 };
 
 export function VideoFeed({ src, online, children }: Props) {

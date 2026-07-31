@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 type Props = {
   label: string;
   axis: "x" | "y";
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   onChange: (value: number) => void; // -100..100
   accent?: "primary" | "accent";
 };
