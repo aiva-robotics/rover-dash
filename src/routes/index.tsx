@@ -33,6 +33,13 @@ export const Route = createFileRoute("/")({
   component: ControlStation,
 });
 
+const MODE_LABELS: Record<HudMode, string> = {
+  live: "Live",
+  demo: "Demoläge",
+  estop: "Nödstopp",
+  offline: "Frånkopplad",
+};
+
 function ControlStation() {
   const { settings, hydrated, update } = useSettings();
   const { connection, status, ping, logs, health, setCommand, sendAction, log, reconnectNow } =
