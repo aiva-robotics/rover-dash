@@ -54,21 +54,21 @@ export function DrivingHUD({ status, throttle, steering, recording }: Props) {
               <Circle className="h-2 w-2 animate-pulse fill-current" /> Rec
             </span>
           )}
-          <div className="grid h-11 w-11 place-items-center rounded-full bg-background/45 backdrop-blur-md">
+          <div className="relative grid h-12 w-12 place-items-center rounded-full bg-background/45 backdrop-blur-md">
             <div
-              className="text-[0.6rem] font-bold text-primary transition-transform duration-300"
+              className="-mt-1.5 text-[0.6rem] font-bold text-primary transition-transform duration-300"
               style={{ transform: `rotate(${heading}deg)` }}
             >
               ▲
             </div>
-            <span className="absolute mt-6 font-mono text-[0.55rem] tabular-nums text-foreground/70">
+            <span className="absolute bottom-1 font-mono text-[0.55rem] leading-none tabular-nums text-foreground/70">
               {Math.round(heading)}°
             </span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex items-end justify-between gap-3 pr-11">
         <div className="space-y-1.5 rounded-xl bg-background/45 px-3 py-2 backdrop-blur-md">
           <Bar label="Gas" value={throttle} />
           <Bar label="Ratt" value={steering} />
