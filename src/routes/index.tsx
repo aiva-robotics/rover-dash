@@ -34,7 +34,7 @@ export const Route = createFileRoute("/")({
 });
 
 function ControlStation() {
-  const { settings, hydrated } = useSettings();
+  const { settings, hydrated, update } = useSettings();
   const { connection, status, ping, logs, health, setCommand, sendAction, log, reconnectNow } =
     useCarSocket({
       url: settings.wsUrl,
@@ -183,6 +183,12 @@ function ControlStation() {
         visible={hydrated && (connection === "disconnected" || estop)}
         reason={estop ? "estop" : "connection"}
         onReset={estop ? () => setEstop(false) : undefined}
+        onRetry={reconnectNow}
+        onDemoMode={() => {
+          setEstop(false);
+          update({ demoMode: true });
+          log("info", "Växlade till demoläge");
+        }}
       />
     </main>
   );

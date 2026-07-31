@@ -1,12 +1,20 @@
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, RefreshCw, Joystick as JoystickIcon } from "lucide-react";
 
 type Props = {
   visible: boolean;
   reason: "connection" | "estop";
   onReset?: (() => void) | undefined;
+  onRetry?: (() => void) | undefined;
+  onDemoMode?: (() => void) | undefined;
 };
 
-export function ConnectionLostOverlay({ visible, reason, onReset }: Props) {
+export function ConnectionLostOverlay({
+  visible,
+  reason,
+  onReset,
+  onRetry,
+  onDemoMode,
+}: Props) {
   if (!visible) return null;
   const isEstop = reason === "estop";
 
@@ -30,6 +38,30 @@ export function ConnectionLostOverlay({ visible, reason, onReset }: Props) {
           >
             Återställ
           </button>
+        )}
+        {!isEstop && (
+          <div className="mt-5 grid gap-2">
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/60 bg-destructive/30 py-3 text-sm font-semibold uppercase tracking-[0.15em] text-destructive-foreground transition-colors hover:bg-destructive/50"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Försök ansluta igen
+              </button>
+            )}
+            {onDemoMode && (
+              <button
+                type="button"
+                onClick={onDemoMode}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/50 bg-primary/15 py-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary transition-colors hover:bg-primary/25"
+              >
+                <JoystickIcon className="h-4 w-4" />
+                Gå till demoläge
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
