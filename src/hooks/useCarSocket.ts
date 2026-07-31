@@ -3,11 +3,48 @@ import type { CarStatus, ConnectionState, DriveCommand, LogEntry } from "@/lib/c
 
 const SEND_INTERVAL = 50; // ms -> 20 Hz
 const MAX_LOGS = 60;
+const MAX_RETRY_DELAY = 15000;
+const BASE_RETRY_DELAY = 1000;
+const PING_HISTORY = 20;
 
 type Options = {
   url: string;
   enabled: boolean;
   demoMode: boolean;
+};
+
+export type SocketHealth = {
+  attempts: number; // consecutive failed attempts
+  totalConnects: number;
+  totalDisconnects: number;
+  connectedSince: number | null;
+  nextRetryAt: number | null;
+  retryDelay: number;
+  messagesReceived: number;
+  commandsSent: number;
+  lastMessageAt: number | null;
+  pingMin: number | null;
+  pingAvg: number | null;
+  pingMax: number | null;
+  jitter: number | null;
+  packetLoss: number; // percent of unanswered pings
+};
+
+const initialHealth: SocketHealth = {
+  attempts: 0,
+  totalConnects: 0,
+  totalDisconnects: 0,
+  connectedSince: null,
+  nextRetryAt: null,
+  retryDelay: 0,
+  messagesReceived: 0,
+  commandsSent: 0,
+  lastMessageAt: null,
+  pingMin: null,
+  pingAvg: null,
+  pingMax: null,
+  jitter: null,
+  packetLoss: 0,
 };
 
 let logId = 0;
@@ -17,12 +54,17 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
   const [status, setStatus] = useState<CarStatus>({});
   const [ping, setPing] = useState<number | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [health, setHealth] = useState<SocketHealth>(initialHealth);
+  const [manualNonce, setManualNonce] = useState(0);
 
   const socketRef = useRef<WebSocket | null>(null);
   const commandRef = useRef<DriveCommand>({ throttle: 0, steering: 0 });
   const lastSentRef = useRef<string>("");
   const retryRef = useRef(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const pingHistoryRef = useRef<number[]>([]);
+  const pingsSentRef = useRef(0);
+  const pongsRef = useRef(0);
 
   const log = useCallback((level: LogEntry["level"], message: string) => {
     setLogs((prev) =>
@@ -38,6 +80,25 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     );
   }, []);
 
+  const recordPing = useCallback((rtt: number) => {
+    setPing(rtt);
+    const hist = pingHistoryRef.current;
+    hist.push(rtt);
+    if (hist.length > PING_HISTORY) hist.shift();
+    const avg = hist.reduce((a, b) => a + b, 0) / hist.length;
+    const jitter =
+      hist.length > 1
+        ? hist.slice(1).reduce((a, v, i) => a + Math.abs(v - hist[i]!), 0) / (hist.length - 1)
+        : 0;
+    setHealth((h) => ({
+      ...h,
+      pingMin: Math.min(...hist),
+      pingMax: Math.max(...hist),
+      pingAvg: Math.round(avg),
+      jitter: Math.round(jitter),
+    }));
+  }, []);
+
   const setCommand = useCallback((cmd: DriveCommand) => {
     commandRef.current = cmd;
   }, []);
@@ -51,6 +112,16 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     return false;
   }, []);
 
+  const reconnectNow = useCallback(() => {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    retryRef.current = 0;
+    socketRef.current?.close();
+    socketRef.current = null;
+    setHealth((h) => ({ ...h, nextRetryAt: null, retryDelay: 0, attempts: 0 }));
+    setManualNonce((n) => n + 1);
+  }, []);
+
   // --- Demo mode: simulated vehicle -----------------------------------
   useEffect(() => {
     if (!demoMode || !enabled) return;
@@ -58,6 +129,13 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     log("info", "Demoläge startat – simulerad bil");
     const start = setTimeout(() => {
       setConnection("connected");
+      setHealth((h) => ({
+        ...h,
+        attempts: 0,
+        totalConnects: h.totalConnects + 1,
+        connectedSince: Date.now(),
+        nextRetryAt: null,
+      }));
       log("info", "Ansluten till demo-fordon");
     }, 600);
     const tick = setInterval(() => {
@@ -69,14 +147,23 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
         temperature: 31 + Math.sin(t / 30) * 2,
         heading: (t * 6) % 360,
       });
-      setPing(18 + Math.round(Math.random() * 14));
+      pingsSentRef.current += 1;
+      pongsRef.current += 1;
+      recordPing(18 + Math.round(Math.random() * 14));
+      setHealth((h) => ({
+        ...h,
+        messagesReceived: h.messagesReceived + 1,
+        commandsSent: h.commandsSent + 1,
+        lastMessageAt: Date.now(),
+      }));
     }, 400);
     return () => {
       clearTimeout(start);
       clearInterval(tick);
       setConnection("disconnected");
+      setHealth((h) => ({ ...h, connectedSince: null }));
     };
-  }, [demoMode, enabled, log]);
+  }, [demoMode, enabled, log, recordPing]);
 
   // --- Real WebSocket --------------------------------------------------
   useEffect(() => {
@@ -89,7 +176,13 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     const connect = () => {
       if (closed) return;
       setConnection("connecting");
-      log("info", `Ansluter till ${url}`);
+      setHealth((h) => ({ ...h, nextRetryAt: null }));
+      log(
+        "info",
+        retryRef.current > 0
+          ? `Återansluter till ${url} (försök ${retryRef.current + 1})`
+          : `Ansluter till ${url}`,
+      );
       let sock: WebSocket;
       try {
         sock = new WebSocket(url);
@@ -102,14 +195,32 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
 
       sock.onopen = () => {
         retryRef.current = 0;
+        pingHistoryRef.current = [];
+        pingsSentRef.current = 0;
+        pongsRef.current = 0;
         setConnection("connected");
+        setHealth((h) => ({
+          ...h,
+          attempts: 0,
+          retryDelay: 0,
+          nextRetryAt: null,
+          totalConnects: h.totalConnects + 1,
+          connectedSince: Date.now(),
+          packetLoss: 0,
+        }));
         log("info", "Anslutning upprättad");
       };
       sock.onmessage = (event) => {
+        setHealth((h) => ({
+          ...h,
+          messagesReceived: h.messagesReceived + 1,
+          lastMessageAt: Date.now(),
+        }));
         try {
           const data = JSON.parse(String(event.data));
           if (data.pong) {
-            setPing(Math.round(Date.now() - Number(data.pong)));
+            pongsRef.current += 1;
+            recordPing(Math.round(Date.now() - Number(data.pong)));
             return;
           }
           setStatus((prev) => ({ ...prev, ...data }));
@@ -123,9 +234,17 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
         setConnection("disconnected");
         setPing(null);
         if (closed) return;
-        log("warn", "Anslutningen bröts – försöker igen");
         retryRef.current += 1;
-        const delay = Math.min(1000 * 2 ** (retryRef.current - 1), 10000);
+        const delay = Math.min(BASE_RETRY_DELAY * 2 ** (retryRef.current - 1), MAX_RETRY_DELAY);
+        setHealth((h) => ({
+          ...h,
+          attempts: retryRef.current,
+          totalDisconnects: h.totalDisconnects + 1,
+          connectedSince: null,
+          retryDelay: delay,
+          nextRetryAt: Date.now() + delay,
+        }));
+        log("warn", `Anslutningen bröts – nytt försök om ${Math.round(delay / 1000)} s`);
         timersRef.current.push(setTimeout(connect, delay));
       };
     };
@@ -139,7 +258,7 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [url, enabled, demoMode, log]);
+  }, [url, enabled, demoMode, log, recordPing, manualNonce]);
 
   // --- Continuous command loop + ping ----------------------------------
   useEffect(() => {
@@ -147,11 +266,23 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     const interval = setInterval(() => {
       const payload = JSON.stringify(commandRef.current);
       if (payload !== lastSentRef.current) {
-        if (sendJson(commandRef.current)) lastSentRef.current = payload;
+        if (sendJson(commandRef.current)) {
+          lastSentRef.current = payload;
+          setHealth((h) => ({ ...h, commandsSent: h.commandsSent + 1 }));
+        }
       }
     }, SEND_INTERVAL);
     const heartbeat = setInterval(() => {
-      sendJson({ ...commandRef.current, ping: Date.now() });
+      if (sendJson({ ...commandRef.current, ping: Date.now() })) {
+        pingsSentRef.current += 1;
+        const sent = pingsSentRef.current;
+        const lost = Math.max(0, sent - pongsRef.current - 1);
+        setHealth((h) => ({
+          ...h,
+          commandsSent: h.commandsSent + 1,
+          packetLoss: sent > 1 ? Math.round((lost / sent) * 100) : 0,
+        }));
+      }
     }, 1000);
     return () => {
       clearInterval(interval);
@@ -168,5 +299,5 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     [sendJson, log, demoMode],
   );
 
-  return { connection, status, ping, logs, setCommand, sendAction, log };
+  return { connection, status, ping, logs, health, setCommand, sendAction, log, reconnectNow };
 }
