@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Camera, Maximize2, Minimize2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Props = {
   src: string;
@@ -11,23 +12,35 @@ export function VideoFeed({ src, online, children }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [failed, setFailed] = useState(false);
+  const isNativeFs = typeof document !== "undefined" && !!document.fullscreenElement;
 
   const toggle = async () => {
     const el = wrapRef.current;
     if (!el) return;
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-      setFullscreen(false);
-    } else {
-      await el.requestFullscreen?.();
-      setFullscreen(true);
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        setFullscreen(false);
+      } else if (el.requestFullscreen) {
+        await el.requestFullscreen();
+        setFullscreen(true);
+      } else {
+        setFullscreen((v) => !v);
+      }
+    } catch {
+      // Fullscreen can be blocked (e.g. inside an embedded preview) – fall back
+      // to an in-page expanded view instead of crashing.
+      setFullscreen((v) => !v);
     }
   };
 
   return (
     <div
       ref={wrapRef}
-      className="glass-panel relative aspect-video w-full overflow-hidden bg-black/60"
+      className={cn(
+        "glass-panel relative aspect-video w-full overflow-hidden bg-black/60",
+        fullscreen && !isNativeFs && "fixed inset-0 z-40 aspect-auto h-screen rounded-none",
+      )}
     >
       {online && src && !failed ? (
         <img
