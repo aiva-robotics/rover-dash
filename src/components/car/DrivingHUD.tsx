@@ -56,14 +56,24 @@ function Bar({ value, label }: { value: number; label: string }) {
   );
 }
 
-export function DrivingHUD({ status, throttle, steering, recording }: Props) {
+export function DrivingHUD({ status, throttle, steering, recording, mode = "live" }: Props) {
   const battery =
     status.batteryPercent ?? (status.battery ? voltageToPercent(status.battery) : undefined);
   const wifi = status.rssi !== undefined ? rssiToPercent(status.rssi) : undefined;
   const heading = status.heading ?? 0;
+  const modeStyle = MODE_STYLES[mode];
 
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3 text-foreground">
+      <div
+        aria-live="polite"
+        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl border px-5 py-2 text-center text-lg font-black uppercase tracking-[0.3em] backdrop-blur-md ${
+          modeStyle.className
+        } ${modeStyle.pulse ? "animate-pulse" : "opacity-90"}`}
+      >
+        {modeStyle.label}
+      </div>
+
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3 rounded-full bg-background/45 px-3 py-1.5 backdrop-blur-md">
           <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums">
