@@ -2,12 +2,39 @@ import { Battery, Circle, Wifi } from "lucide-react";
 import type { CarStatus } from "@/lib/car-protocol";
 import { rssiToPercent, voltageToPercent } from "@/lib/car-protocol";
 
+export type HudMode = "live" | "demo" | "estop" | "offline";
+
 type Props = {
   status: CarStatus;
   throttle: number;
   steering: number;
   recording?: boolean | undefined;
+  mode?: HudMode | undefined;
 };
+
+const MODE_STYLES: Record<HudMode, { label: string; className: string; pulse: boolean }> = {
+  live: {
+    label: "Live",
+    className: "border-primary/70 bg-primary/20 text-primary",
+    pulse: false,
+  },
+  demo: {
+    label: "Demoläge",
+    className: "border-accent/70 bg-accent/20 text-accent",
+    pulse: false,
+  },
+  estop: {
+    label: "Nödstopp",
+    className: "border-destructive bg-destructive/30 text-destructive",
+    pulse: true,
+  },
+  offline: {
+    label: "Frånkopplad",
+    className: "border-destructive/70 bg-destructive/20 text-destructive",
+    pulse: true,
+  },
+};
+
 
 function Bar({ value, label }: { value: number; label: string }) {
   const positive = value >= 0;
