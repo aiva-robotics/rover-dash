@@ -8,6 +8,7 @@ import { ControlButtons } from "@/components/car/ControlButtons";
 import { TelemetryPanel } from "@/components/car/TelemetryPanel";
 import { ConnectionLostOverlay } from "@/components/car/ConnectionLostOverlay";
 import { LogPanel } from "@/components/car/LogPanel";
+import { ConnectionHealthPanel } from "@/components/car/ConnectionHealthPanel";
 import { FuturePanels } from "@/components/car/FuturePanels";
 import { useCarSocket } from "@/hooks/useCarSocket";
 import { useSettings } from "@/hooks/useSettings";
@@ -34,11 +35,12 @@ export const Route = createFileRoute("/")({
 
 function ControlStation() {
   const { settings, hydrated } = useSettings();
-  const { connection, status, ping, logs, setCommand, sendAction, log } = useCarSocket({
-    url: settings.wsUrl,
-    enabled: hydrated,
-    demoMode: settings.demoMode,
-  });
+  const { connection, status, ping, logs, health, setCommand, sendAction, log, reconnectNow } =
+    useCarSocket({
+      url: settings.wsUrl,
+      enabled: hydrated,
+      demoMode: settings.demoMode,
+    });
 
   const [throttleRaw, setThrottleRaw] = useState(0);
   const [steeringRaw, setSteeringRaw] = useState(0);
@@ -165,6 +167,13 @@ function ControlStation() {
             sendAction("estop");
           }
         }}
+      />
+
+      <ConnectionHealthPanel
+        health={health}
+        connection={connection}
+        ping={ping}
+        onReconnect={reconnectNow}
       />
 
       <FuturePanels />
