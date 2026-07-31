@@ -2,12 +2,39 @@ import { Battery, Circle, Wifi } from "lucide-react";
 import type { CarStatus } from "@/lib/car-protocol";
 import { rssiToPercent, voltageToPercent } from "@/lib/car-protocol";
 
+export type HudMode = "live" | "demo" | "estop" | "offline";
+
 type Props = {
   status: CarStatus;
   throttle: number;
   steering: number;
   recording?: boolean | undefined;
+  mode?: HudMode | undefined;
 };
+
+const MODE_STYLES: Record<HudMode, { label: string; className: string; pulse: boolean }> = {
+  live: {
+    label: "Live",
+    className: "border-primary/70 bg-primary/20 text-primary",
+    pulse: false,
+  },
+  demo: {
+    label: "Demoläge",
+    className: "border-accent/70 bg-accent/20 text-accent",
+    pulse: false,
+  },
+  estop: {
+    label: "Nödstopp",
+    className: "border-destructive bg-destructive/30 text-destructive",
+    pulse: true,
+  },
+  offline: {
+    label: "Frånkopplad",
+    className: "border-destructive/70 bg-destructive/20 text-destructive",
+    pulse: true,
+  },
+};
+
 
 function Bar({ value, label }: { value: number; label: string }) {
   const positive = value >= 0;
@@ -29,14 +56,27 @@ function Bar({ value, label }: { value: number; label: string }) {
   );
 }
 
-export function DrivingHUD({ status, throttle, steering, recording }: Props) {
+export function DrivingHUD({ status, throttle, steering, recording, mode = "live" }: Props) {
   const battery =
     status.batteryPercent ?? (status.battery ? voltageToPercent(status.battery) : undefined);
   const wifi = status.rssi !== undefined ? rssiToPercent(status.rssi) : undefined;
   const heading = status.heading ?? 0;
+  const modeStyle = MODE_STYLES[mode];
 
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3 text-foreground">
+      <div
+        aria-live="polite"
+        className={
+          mode === "live"
+            ? `absolute left-1/2 top-3 -translate-x-1/2 rounded-full border px-3 py-1 text-[0.6rem] font-bold uppercase tracking-[0.3em] backdrop-blur-md ${modeStyle.className}`
+            : `absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl border px-5 py-2 text-center text-lg font-black uppercase tracking-[0.3em] backdrop-blur-md ${modeStyle.className} ${modeStyle.pulse ? "animate-pulse" : "opacity-90"}`
+        }
+      >
+        {modeStyle.label}
+      </div>
+
+
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3 rounded-full bg-background/45 px-3 py-1.5 backdrop-blur-md">
           <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums">

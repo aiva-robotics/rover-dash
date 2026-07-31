@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { VideoFeed } from "@/components/car/VideoFeed";
-import { DrivingHUD } from "@/components/car/DrivingHUD";
+import { DrivingHUD, type HudMode } from "@/components/car/DrivingHUD";
 import { Joystick } from "@/components/car/Joystick";
 import { ControlButtons } from "@/components/car/ControlButtons";
 import { TelemetryPanel } from "@/components/car/TelemetryPanel";
@@ -32,6 +32,13 @@ export const Route = createFileRoute("/")({
   }),
   component: ControlStation,
 });
+
+const MODE_LABELS: Record<HudMode, string> = {
+  live: "Live",
+  demo: "Demoläge",
+  estop: "Nödstopp",
+  offline: "Frånkopplad",
+};
 
 function ControlStation() {
   const { settings, hydrated, update } = useSettings();
@@ -74,6 +81,29 @@ function ControlStation() {
       setSteeringRaw(0);
     }
   }, [connection, hydrated]);
+
+  const hudMode: HudMode = estop
+    ? "estop"
+    : !online
+      ? "offline"
+      : settings.demoMode
+        ? "demo"
+        : "live";
+
+  const prevMode = useRef<HudMode | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (prevMode.current === hudMode) return;
+    const from = prevMode.current;
+    prevMode.current = hudMode;
+    if (!from) return;
+    const stamp = new Date().toLocaleTimeString("sv-SE");
+    log(
+      hudMode === "estop" || hudMode === "offline" ? "warn" : "info",
+      `[${stamp}] Läge: ${MODE_LABELS[from]} → ${MODE_LABELS[hudMode]}`,
+    );
+  }, [hudMode, hydrated, log]);
+
 
   const horn = useCallback(() => {
     sendAction("horn");
@@ -120,8 +150,10 @@ function ControlStation() {
           throttle={throttle}
           steering={steering}
           recording={status.recording ?? false}
+          mode={hudMode}
         />
       </VideoFeed>
+
 
       <TelemetryPanel status={status} connection={connection} ping={ping} />
 
