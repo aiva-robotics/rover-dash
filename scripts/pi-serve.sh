@@ -5,13 +5,23 @@ set -euo pipefail
 log() { echo "[pi-serve] $*"; }
 
 PORT="${PORT:-3000}"
-ROOT="${ROOT:-dist/client}"
+ROOT="${ROOT:-}"
+if [ -z "$ROOT" ]; then
+  for candidate in dist/client .output/public dist/public build/client dist; do
+    if [ -f "$candidate/index.html" ]; then
+      ROOT="$candidate"
+      break
+    fi
+  done
+fi
 
-if [ ! -d "$ROOT" ]; then
-  echo "Error: build output not found at $ROOT"
+if [ -z "$ROOT" ] || [ ! -d "$ROOT" ]; then
+  echo "Error: build output not found (checked dist/client, .output/public, dist/public, build/client, dist)"
   echo "Run scripts/pi-build.sh first."
   exit 1
 fi
+export ROOT
+
 
 # Prefer nginx if installed and configured; otherwise use the Node fallback.
 if command -v nginx >/dev/null 2>&1 && [ -f /etc/nginx/sites-enabled/rc-control.conf ]; then
