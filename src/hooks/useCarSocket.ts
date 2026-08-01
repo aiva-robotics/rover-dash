@@ -232,8 +232,13 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
 
   // --- Real WebSocket --------------------------------------------------
   useEffect(() => {
-    if (demoMode || !enabled || !url) {
+    if (demoMode || !enabled) {
       setConnection("disconnected");
+      return;
+    }
+    if (!url) {
+      setConnection("disconnected");
+      raiseError("no_url", "", 0);
       return;
     }
     let closed = false;
@@ -249,10 +254,13 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
           : `Ansluter till ${url}`,
       );
       let sock: WebSocket;
+      openedRef.current = false;
+      serverErrorRef.current = null;
       try {
         sock = new WebSocket(url);
       } catch {
         log("error", "Ogiltig WebSocket-adress");
+        raiseError("invalid_url", url, retryRef.current);
         setConnection("disconnected");
         return;
       }
@@ -260,10 +268,12 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
 
       sock.onopen = () => {
         retryRef.current = 0;
+        openedRef.current = true;
         pingHistoryRef.current = [];
         pingsSentRef.current = 0;
         pongsRef.current = 0;
         setConnection("connected");
+        setLastError(null);
         setHealth((h) => ({
           ...h,
           attempts: 0,
@@ -288,6 +298,12 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
             recordPing(Math.round(Date.now() - Number(data.pong)));
             return;
           }
+          if (data.error === "busy" || data.error === "taken_over") {
+            serverErrorRef.current = data.error;
+            log("error", String(data.message ?? data.error));
+            raiseError(data.error, url, retryRef.current);
+            return;
+          }
           setStatus((prev) => ({ ...prev, ...data }));
         } catch {
           log("warn", "Kunde inte tolka meddelande från bilen");
@@ -309,6 +325,9 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
           retryDelay: delay,
           nextRetryAt: Date.now() + delay,
         }));
+        const code: SocketErrorCode =
+          serverErrorRef.current ?? (openedRef.current ? "dropped" : "unreachable");
+        raiseError(code, url, retryRef.current);
         log("warn", `Anslutningen bröts – nytt försök om ${Math.round(delay / 1000)} s`);
         timersRef.current.push(setTimeout(connect, delay));
       };
@@ -323,7 +342,8 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [url, enabled, demoMode, log, recordPing, manualNonce]);
+  }, [url, enabled, demoMode, log, recordPing, manualNonce, raiseError]);
+
 
   // --- Continuous command loop + ping ----------------------------------
   useEffect(() => {
