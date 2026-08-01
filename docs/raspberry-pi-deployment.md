@@ -15,7 +15,9 @@ The app is a static React site. The Pi only serves the web files; the browser th
 You have two deployment options:
 
 1. **Cross-build (recommended)** — Build on your dev machine and copy the static files to the Pi. Fast and gentle on the Pi.
-2. **Native build** — Copy the source to the Pi and build it there. Useful if you want to edit code directly on the Pi or do not have another computer.
+2. **Native build** — Download the source to the Pi with `git` and build it there. Useful if you want to edit code directly on the Pi or do not have another computer.
+
+If you already pushed the project to GitHub and want the Pi to fetch and build it automatically, see the **One-command clone + setup** shortcut in Option B.
 
 ---
 
@@ -79,9 +81,47 @@ bun run deploy:pi
 
 > ⚠️ **Warning:** A Pi 3 only has 1 GB RAM. The Vite/TanStack build is heavy and can take 10–30 minutes, or longer if swap is too small. A Pi 4/5 with more RAM is much more comfortable. The scripts below configure extra swap to make the build possible.
 
-### 1. Prepare the Pi
+### 1. Download the project from GitHub
 
-Copy the project to the Pi (or clone it with `git`), then SSH in and run the setup script:
+SSH into the Pi and clone your repository. Replace the URL below with your own repo URL:
+
+```bash
+cd ~
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git rc-control-app
+cd rc-control-app
+```
+
+> **Tip:** If your repository is private, use SSH instead (`git@github.com:YOUR_USERNAME/YOUR_REPO_NAME.git`) or create a [GitHub personal access token](https://github.com/settings/tokens) and clone with `https://<token>@github.com/YOUR_USERNAME/YOUR_REPO_NAME.git`.
+
+To update the app later after pushing changes from another machine:
+
+```bash
+cd ~/rc-control-app
+git pull
+bash scripts/pi-build.sh
+```
+
+### One-command clone + setup shortcut
+
+If you want the Pi to download, build, and serve the app in one go, SSH in and run:
+
+```bash
+export REPO_URL=https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/scripts/pi-clone-and-setup.sh | bash
+```
+
+Or, after cloning once, run the included script directly:
+
+```bash
+export REPO_URL=https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+bash scripts/pi-clone-and-setup.sh
+```
+
+This clones/updates the repo, installs dependencies, builds the app, configures nginx, and enables auto-start on boot.
+
+### 2. Prepare the Pi
+
+Run the setup script inside the project directory:
 
 ```bash
 cd rc-control-app
@@ -90,7 +130,7 @@ bash scripts/pi-build-setup.sh
 
 This installs Node.js, bun, nginx, git, and configures a 2 GB swap file.
 
-### 2. Build the app on the Pi
+### 3. Build the app on the Pi
 
 Inside the project directory on the Pi:
 
