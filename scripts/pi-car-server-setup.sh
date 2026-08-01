@@ -53,9 +53,21 @@ if ! python3 -c "import pigpio" 2>/dev/null; then
   sudo pip3 install --break-system-packages pigpio || sudo pip3 install pigpio
 fi
 
+echo "==> Säkerställer systemd-tjänsten pigpiod"
+if ! systemctl list-unit-files 2>/dev/null | grep -q '^pigpiod\.service'; then
+  PIGPIOD_BIN="$(command -v pigpiod || echo /usr/local/bin/pigpiod)"
+  sed "s|/usr/local/bin/pigpiod|$PIGPIOD_BIN|" "$APP_DIR/deployment/pigpiod.service" \
+    | sudo tee /etc/systemd/system/pigpiod.service >/dev/null
+  sudo systemctl daemon-reload
+fi
+
 echo "==> Startar pigpiod"
 sudo systemctl enable --now pigpiod || true
-sleep 1
+sleep 2
+if ! pgrep -x pigpiod >/dev/null; then
+  echo "!! pigpiod kunde inte startas – kör: sudo journalctl -u pigpiod -n 30"
+fi
+
 
 echo "==> Lägger till $RUN_USER i gruppen gpio"
 sudo usermod -aG gpio "$RUN_USER" || true
