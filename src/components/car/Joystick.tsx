@@ -9,6 +9,17 @@ type Props = {
   accent?: "primary" | "accent";
 };
 
+/** Dödzon i procent – hindrar drift kring mitten. */
+const DEADZONE = 5;
+const KEY_STEP = 10;
+
+function applyDeadzone(raw: number) {
+  if (Math.abs(raw) <= DEADZONE) return 0;
+  const sign = raw < 0 ? -1 : 1;
+  // Skala om så att området utanför dödzonen fortfarande når 100 %.
+  return Math.round(sign * ((Math.abs(raw) - DEADZONE) / (100 - DEADZONE)) * 100);
+}
+
 export function Joystick({ label, axis, disabled, onChange, accent = "primary" }: Props) {
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [value, setValue] = useState(0);
@@ -35,7 +46,7 @@ export function Joystick({ label, axis, disabled, onChange, accent = "primary" }
     const cy = rect.top + rect.height / 2;
     const raw =
       axis === "x" ? (clientX - cx) / (rect.width / 2) : -((clientY - cy) / (rect.height / 2));
-    return Math.round(Math.max(-1, Math.min(1, raw)) * 100);
+    return applyDeadzone(Math.round(Math.max(-1, Math.min(1, raw)) * 100));
   };
 
   const handleDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -51,11 +62,29 @@ export function Joystick({ label, axis, disabled, onChange, accent = "primary" }
     emit(compute(e.clientX, e.clientY));
   };
 
+  // Släpp bara på pointerup/pointercancel. Pointer capture garanterar att de
+  // kommer fram även utanför elementet – pointerleave får INTE nollställa,
+  // det kappar annars gasen mitt i en snabb rörelse.
   const release = (e: React.PointerEvent<HTMLDivElement>) => {
     if (pointerId.current !== e.pointerId) return;
     pointerId.current = null;
     setActive(false);
     emit(0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    const inc = axis === "x" ? { ArrowRight: 1, ArrowLeft: -1 } : { ArrowUp: 1, ArrowDown: -1 };
+    const dir = (inc as Record<string, number | undefined>)[e.key];
+    if (dir !== undefined) {
+      e.preventDefault();
+      emit(Math.max(-100, Math.min(100, value + dir * KEY_STEP)));
+      return;
+    }
+    if (e.key === "Home" || e.key === " " || e.key === "Escape") {
+      e.preventDefault();
+      emit(0);
+    }
   };
 
   const offset = `${value}%`;
@@ -73,9 +102,11 @@ export function Joystick({ label, axis, disabled, onChange, accent = "primary" }
         onPointerMove={handleMove}
         onPointerUp={release}
         onPointerCancel={release}
-        onPointerLeave={release}
+        onKeyDown={handleKeyDown}
+        onBlur={() => emit(0)}
+        tabIndex={disabled ? -1 : 0}
         className={cn(
-          "relative aspect-square w-full max-w-[190px] touch-none rounded-full border border-border/60 bg-background/40 shadow-inner backdrop-blur-md transition-opacity",
+          "relative aspect-square w-full max-w-[190px] touch-none rounded-full border border-border/60 bg-background/40 shadow-inner backdrop-blur-md transition-opacity outline-none focus-visible:border-primary",
           disabled && "pointer-events-none opacity-40",
         )}
         role="slider"
@@ -83,14 +114,9 @@ export function Joystick({ label, axis, disabled, onChange, accent = "primary" }
         aria-valuenow={value}
         aria-valuemin={-100}
         aria-valuemax={100}
+        aria-disabled={disabled ?? false}
       >
         <div className="absolute inset-3 rounded-full border border-dashed border-border/40" />
-        <div
-          className={cn(
-            "absolute left-1/2 top-1/2 h-1/2 w-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border",
-            active ? "border-transparent" : "border-transparent",
-          )}
-        />
         <div
           className="absolute left-1/2 top-1/2 grid h-[42%] w-[42%] place-items-center rounded-full border border-border/70 text-[0.6rem] font-semibold"
           style={{
