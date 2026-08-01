@@ -215,6 +215,8 @@ function ControlStation() {
         disabled={locked}
         headlights={headlights}
         stopped={estop}
+        pending={estopPending}
+
         onToggleLights={() => {
           setHeadlights((v) => {
             sendAction("headlights", !v);
