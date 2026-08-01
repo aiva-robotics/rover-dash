@@ -61,7 +61,23 @@ else
   npm run build
 fi
 
-log "Build complete. Output should be in dist/client/"
+BUILD_DIR=""
+for candidate in dist/client .output/public dist/public build/client dist; do
+  if [ -f "$candidate/index.html" ]; then
+    BUILD_DIR="$candidate"
+    break
+  fi
+done
+
+if [ -z "$BUILD_DIR" ]; then
+  log "ERROR: the build finished but no index.html was produced."
+  log "Checked: dist/client, .output/public, dist/public, build/client, dist"
+  ls -la dist 2>/dev/null || true
+  exit 1
+fi
+
+log "Build complete. Output: $BUILD_DIR"
+export BUILD_DIR
 
 # Deploy the finished build locally (nginx web root) unless disabled with DEPLOY=false
 DEPLOY="${DEPLOY:-true}"
