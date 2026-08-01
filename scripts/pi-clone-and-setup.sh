@@ -64,22 +64,8 @@ fi
 log "Running Pi setup (Node, nginx, swap, etc.)..."
 bash scripts/pi-build-setup.sh
 
-# 3. Build the app
+# 3. Build the app (pi-build.sh also deploys it: systemd service + nginx proxy)
 log "Building the app on the Pi (this may take 10–30 min on a Pi 3)..."
 bash scripts/pi-build.sh
-
-# 4. Install nginx config
-log "Installing nginx site config..."
-sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-sudo cp deployment/nginx-rc-control.conf /etc/nginx/sites-available/rc-control.conf
-sudo ln -sf /etc/nginx/sites-available/rc-control.conf /etc/nginx/sites-enabled/rc-control.conf
-sudo nginx -t && sudo systemctl reload nginx
-
-# 5. Enable auto-start on boot
-log "Enabling rc-control systemd service..."
-sudo cp deployment/rc-control.service /etc/systemd/system/rc-control.service
-sudo systemctl daemon-reload
-sudo systemctl enable rc-control
-sudo systemctl start rc-control
 
 log "Done. The app should be available at http://$(hostname -I | awk '{print $1}')"

@@ -1,41 +1,35 @@
 #!/usr/bin/env bash
-# Deploy the built RC Control Station app to a Raspberry Pi running nginx.
-# Run: bun run build && bun run deploy:pi
+# Cross-build: build the RC Control Station app on your dev machine and deploy
+# the server bundle to a Raspberry Pi (systemd + nginx reverse proxy).
+#
+# Run:  NITRO_PRESET=node-server bun run build && bun run deploy:pi
 
 set -euo pipefail
 
 PI_HOST="${PI_HOST:-pi@raspberrypi.local}"
-PI_WEB_ROOT="${PI_WEB_ROOT:-/var/www/rc-control}"
-LOCAL_BUILD="${LOCAL_BUILD:-dist/client}"
-NGINX_SITE="rc-control"
+PI_APP_DIR="${PI_APP_DIR:-/home/pi/rc-control-app}"
+LOCAL_BUILD="${LOCAL_BUILD:-.output}"
+APP_PORT="${PORT:-3000}"
 
 echo "Deploying to $PI_HOST ..."
 
-if [ ! -d "$LOCAL_BUILD" ]; then
-  echo "Error: build output not found at $LOCAL_BUILD"
-  echo "Run 'bun run build' first."
+if [ ! -f "$LOCAL_BUILD/server/index.mjs" ]; then
+  echo "Error: server build not found at $LOCAL_BUILD/server/index.mjs"
+  echo "Build it first with:  NITRO_PRESET=node-server bun run build"
   exit 1
 fi
 
-# Copy static files to the Pi
-rsync -av --delete "$LOCAL_BUILD/" "$PI_HOST:$PI_WEB_ROOT/"
+ssh "$PI_HOST" "mkdir -p $PI_APP_DIR/deployment"
 
-# Copy the fallback Node server too, just in case
-scp "deployment/pi-server.js" "$PI_HOST:$PI_WEB_ROOT/" || true
+# Copy the self-contained Nitro server bundle and the deployment files
+rsync -av --delete "$LOCAL_BUILD/" "$PI_HOST:$PI_APP_DIR/.output/"
+rsync -av deployment/ "$PI_HOST:$PI_APP_DIR/deployment/"
+rsync -av scripts/pi-deploy-local.sh "$PI_HOST:$PI_APP_DIR/scripts/pi-deploy-local.sh" 2>/dev/null || {
+  ssh "$PI_HOST" "mkdir -p $PI_APP_DIR/scripts"
+  rsync -av scripts/pi-deploy-local.sh "$PI_HOST:$PI_APP_DIR/scripts/pi-deploy-local.sh"
+}
 
-# Install nginx config and reload if nginx is present
-if ssh "$PI_HOST" "command -v nginx >/dev/null 2>&1"; then
-  scp "deployment/nginx-rc-control.conf" "$PI_HOST:/tmp/$NGINX_SITE.conf"
-  ssh "$PI_HOST" "
-    sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-    sudo mv /tmp/$NGINX_SITE.conf /etc/nginx/sites-available/$NGINX_SITE.conf
-    sudo ln -sf /etc/nginx/sites-available/$NGINX_SITE.conf /etc/nginx/sites-enabled/$NGINX_SITE.conf
-    sudo nginx -t && sudo systemctl reload nginx
-  "
-  echo "Deployed to http://$PI_HOST (nginx)"
-else
-  echo "nginx not found on Pi. Start the fallback server with:"
-  echo "  ssh $PI_HOST 'node $PI_WEB_ROOT/pi-server.js'"
-fi
+# Install/refresh the systemd service and nginx proxy on the Pi
+ssh "$PI_HOST" "cd $PI_APP_DIR && PORT=$APP_PORT bash scripts/pi-deploy-local.sh"
 
 echo "Done."
