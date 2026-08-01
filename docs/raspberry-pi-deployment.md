@@ -30,24 +30,17 @@ SSH into the Pi and run:
 
 ```bash
 sudo apt update
-sudo apt install -y nginx
+sudo apt install -y nginx nodejs
 sudo systemctl enable nginx
-```
-
-Create the web root folder:
-
-```bash
-sudo mkdir -p /var/www/rc-control
-sudo chown -R $USER:$USER /var/www/rc-control
 ```
 
 ### Deploy from your development machine
 
-Edit `scripts/deploy-to-pi.sh` and set:
+Set the target host (or edit `scripts/deploy-to-pi.sh`):
 
 ```bash
-PI_HOST=pi@raspberrypi.local
-PI_WEB_ROOT=/var/www/rc-control
+export PI_HOST=pi@raspberrypi.local
+export PI_APP_DIR=/home/pi/rc-control-app
 ```
 
 Use the Pi's IP address if `.local` does not resolve on your network.
@@ -55,11 +48,11 @@ Use the Pi's IP address if `.local` does not resolve on your network.
 Build and deploy:
 
 ```bash
-bun run build
+NITRO_PRESET=node-server bun run build
 bun run deploy:pi
 ```
 
-This copies `dist/client/` to the Pi and reloads nginx.
+This copies the `.output/` server bundle to the Pi, installs the `rc-control` systemd service and the nginx reverse proxy, and starts the app.
 
 Open the app on any device on the same network:
 
@@ -72,9 +65,10 @@ http://raspberrypi.local
 Run the same two commands again:
 
 ```bash
-bun run build
+NITRO_PRESET=node-server bun run build
 bun run deploy:pi
 ```
+
 
 ---
 
