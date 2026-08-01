@@ -109,6 +109,7 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [health, setHealth] = useState<SocketHealth>(initialHealth);
   const [manualNonce, setManualNonce] = useState(0);
+  const [lastError, setLastError] = useState<SocketError | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const commandRef = useRef<DriveCommand>({ throttle: 0, steering: 0 });
@@ -118,6 +119,14 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
   const pingHistoryRef = useRef<number[]>([]);
   const pingsSentRef = useRef(0);
   const pongsRef = useRef(0);
+  const openedRef = useRef(false);
+  const serverErrorRef = useRef<SocketErrorCode | null>(null);
+
+  const raiseError = useCallback((code: SocketErrorCode, targetUrl: string, attempts: number) => {
+    const text = ERROR_TEXT[code];
+    setLastError({ code, ...text, url: targetUrl, attempts, at: Date.now() });
+  }, []);
+
 
   const log = useCallback((level: LogEntry["level"], message: string) => {
     setLogs((prev) =>
