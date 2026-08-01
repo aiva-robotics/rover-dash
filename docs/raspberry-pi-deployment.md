@@ -10,14 +10,15 @@ Run the RC Control Station web app locally on a Raspberry Pi 3 so you can contro
 
 ## How it works
 
-The app is a static React site. The Pi only serves the web files; the browser then connects directly to the ESP32-CAM/WebSocket server in the car.
+The app is server-rendered, so the Pi runs a small Node server (built with the `node-server` target) behind nginx on port 80. The browser still connects directly to the ESP32-CAM/WebSocket server in the car.
 
 You have two deployment options:
 
-1. **Cross-build (recommended)** — Build on your dev machine and copy the static files to the Pi. Fast and gentle on the Pi.
+1. **Cross-build (recommended)** — Build on your dev machine and copy the server bundle to the Pi. Fast and gentle on the Pi.
 2. **Native build** — Download the source to the Pi with `git` and build it there. Useful if you want to edit code directly on the Pi or do not have another computer.
 
 If you already pushed the project to GitHub and want the Pi to fetch and build it automatically, see the **One-command clone + setup** shortcut in Option B.
+
 
 ---
 
