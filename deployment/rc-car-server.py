@@ -17,10 +17,12 @@ import asyncio
 import json
 import logging
 import re
+import hmac
 import signal
 import subprocess
 import sys
 import time
+from urllib.parse import parse_qs, urlparse
 
 import config
 from hardware import RCOutputs, clamp
@@ -96,6 +98,25 @@ def wifi_rssi() -> int | None:
     return None
 
 
+# Cachade systemvärden – iwconfig är ett subprocess-anrop och får aldrig
+# köras i event-loopen (det fördröjer styrkommandon).
+_cached_temp: float | None = None
+_cached_rssi: int | None = None
+
+
+async def system_stats_loop() -> None:
+    """Läser CPU-temp och WiFi-RSSI i en tråd var 5:e sekund."""
+    global _cached_temp, _cached_rssi
+    loop = asyncio.get_running_loop()
+    while True:
+        try:
+            _cached_temp = await loop.run_in_executor(None, cpu_temperature)
+            _cached_rssi = await loop.run_in_executor(None, wifi_rssi)
+        except Exception:
+            log.exception("Kunde inte läsa systemstatus")
+        await asyncio.sleep(5.0)
+
+
 def telemetry() -> dict:
     payload = {
         "speed": round(abs(state.throttle) * config.SPEED_FACTOR, 1),
@@ -106,12 +127,10 @@ def telemetry() -> dict:
         "armed": outputs.armed,
         "failsafe": state.failsafe,
     }
-    temp = cpu_temperature()
-    if temp is not None:
-        payload["temperature"] = temp
-    rssi = wifi_rssi()
-    if rssi is not None:
-        payload["rssi"] = rssi
+    if _cached_temp is not None:
+        payload["temperature"] = _cached_temp
+    if _cached_rssi is not None:
+        payload["rssi"] = _cached_rssi
     return payload
 
 
@@ -171,13 +190,36 @@ async def telemetry_loop() -> None:
             continue
         try:
             await client.send(json.dumps(telemetry()))
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("Kunde inte skicka telemetri: %s", exc.__class__.__name__)
+
+
+def _request_path(websocket) -> str:
+    request = getattr(websocket, "request", None)
+    return getattr(request, "path", None) or getattr(websocket, "path", "") or ""
+
+
+def _authorized(websocket) -> bool:
+    if not config.AUTH_TOKEN:
+        return True
+    query = urlparse(_request_path(websocket)).query
+    supplied = parse_qs(query).get("token", [""])[0]
+    return hmac.compare_digest(supplied, config.AUTH_TOKEN)
 
 
 async def handler(websocket) -> None:
     global active_client
     peer = getattr(websocket, "remote_address", ("?", 0))
+
+    if not _authorized(websocket):
+        log.warning("Avvisar klient %s – felaktig token", peer[0])
+        try:
+            await websocket.send(
+                json.dumps({"error": "unauthorized", "message": "Felaktig eller saknad åtkomsttoken"})
+            )
+        finally:
+            await websocket.close(code=4003, reason="unauthorized")
+        return
 
     if config.SINGLE_CLIENT and active_client is not None and active_client is not websocket:
         if config.TAKEOVER:
@@ -216,6 +258,11 @@ async def handler(websocket) -> None:
             if not isinstance(data, dict):
                 continue
 
+            if "estop" in data:
+                requested = bool(data["estop"])
+                if requested != state.estop:
+                    handle_action("estop" if requested else "resume", None)
+
             if "throttle" in data or "steering" in data:
                 apply_command(data.get("throttle", 0), data.get("steering", 0))
 
@@ -253,11 +300,15 @@ async def main() -> None:
 
     async with serve(handler, config.HOST, config.PORT, ping_interval=20, ping_timeout=20):
         log.info("WebSocket-server lyssnar på ws://%s:%s", config.HOST, config.PORT)
+        if not config.AUTH_TOKEN:
+            log.warning("RC_TOKEN är inte satt – vem som helst i nätverket kan styra bilen")
         watch = asyncio.create_task(watchdog())
         tele = asyncio.create_task(telemetry_loop())
+        stats = asyncio.create_task(system_stats_loop())
         await stop.wait()
         watch.cancel()
         tele.cancel()
+        stats.cancel()
 
     log.info("Stänger av – neutral utgång")
     outputs.close()
