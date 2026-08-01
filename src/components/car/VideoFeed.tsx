@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Camera, Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,11 @@ export function VideoFeed({ src, online, children }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  // Ny videoadress → försök igen även om den förra strömmen misslyckades.
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
   const isNativeFs = typeof document !== "undefined" && !!document.fullscreenElement;
 
   const toggle = async () => {
