@@ -46,11 +46,13 @@ else
     || npm install --include=optional --prefer-offline --no-audit --no-fund
 fi
 
+NAPI_ARCH="$( [ "$ARCH" = "x86_64" ] && echo x64 || echo arm64 )"
+
 # Verify the Rolldown native binding is actually present before building.
 if ! ls node_modules/@rolldown/binding-linux-*/*.node >/dev/null 2>&1; then
   log "Rolldown native binding missing — reinstalling it explicitly..."
   rm -rf node_modules/.package-lock.json
-  npm install --include=optional --no-audit --no-fund "@rolldown/binding-linux-$( [ "$ARCH" = "x86_64" ] && echo x64 || echo arm64 )-gnu" || true
+  npm install --include=optional --no-audit --no-fund "@rolldown/binding-linux-${NAPI_ARCH}-gnu" || true
 fi
 
 if ! ls node_modules/@rolldown/binding-linux-*/*.node >/dev/null 2>&1; then
@@ -58,6 +60,27 @@ if ! ls node_modules/@rolldown/binding-linux-*/*.node >/dev/null 2>&1; then
   log "Try a clean install:  rm -rf node_modules package-lock.json && bash scripts/pi-build.sh"
   exit 1
 fi
+
+# Tailwind v4 compiles CSS with lightningcss, which also ships its native
+# binary as an OPTIONAL dependency. Missing it causes:
+#   Cannot find module '../lightningcss.linux-arm64-gnu.node'
+if ! ls node_modules/lightningcss-linux-*/*.node >/dev/null 2>&1; then
+  log "lightningcss native binding missing — installing it explicitly..."
+  LCSS_VERSION="$(node -p "try{require('./node_modules/lightningcss/package.json').version}catch(e){''}" 2>/dev/null || true)"
+  if [ -n "$LCSS_VERSION" ]; then
+    npm install --include=optional --no-save --no-audit --no-fund "lightningcss-linux-${NAPI_ARCH}-gnu@${LCSS_VERSION}" || true
+  else
+    npm install --include=optional --no-save --no-audit --no-fund "lightningcss-linux-${NAPI_ARCH}-gnu" || true
+  fi
+fi
+
+if ! ls node_modules/lightningcss-linux-*/*.node >/dev/null 2>&1; then
+  log "ERROR: lightningcss native binding still missing."
+  log "Make sure you are on 64-bit Raspberry Pi OS with glibc (not musl/Alpine),"
+  log "then do a clean install:  rm -rf node_modules package-lock.json && bash scripts/pi-build.sh"
+  exit 1
+fi
+
 
 log "Building production bundle..."
 if [ "$RUNNER" = "bun" ]; then
