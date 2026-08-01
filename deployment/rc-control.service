@@ -1,0 +1,16 @@
+[Unit]
+Description=RC Control Station web app
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/rc-control-app
+Environment=PORT=3000
+Environment=ROOT=dist/client
+ExecStart=/usr/bin/node deployment/pi-server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
