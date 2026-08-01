@@ -42,12 +42,23 @@ const MODE_LABELS: Record<HudMode, string> = {
 
 function ControlStation() {
   const { settings, hydrated, update } = useSettings();
-  const { connection, status, ping, logs, health, setCommand, sendAction, log, reconnectNow } =
-    useCarSocket({
-      url: settings.wsUrl,
-      enabled: hydrated,
-      demoMode: settings.demoMode,
-    });
+  const {
+    connection,
+    status,
+    ping,
+    logs,
+    health,
+    lastError,
+    setCommand,
+    sendAction,
+    log,
+    reconnectNow,
+  } = useCarSocket({
+    url: settings.wsUrl,
+    enabled: hydrated,
+    demoMode: settings.demoMode,
+  });
+
 
   const [throttleRaw, setThrottleRaw] = useState(0);
   const [steeringRaw, setSteeringRaw] = useState(0);

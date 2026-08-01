@@ -47,12 +47,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setSettings({ ...defaultSettings, ...JSON.parse(raw) });
+      if (raw) {
+        setSettings({ ...defaultSettings, ...JSON.parse(raw) });
+      } else {
+        setSettings({ ...defaultSettings, wsUrl: localWsUrl() });
+      }
     } catch {
       /* ignore */
     }
     setHydrated(true);
   }, []);
+
 
   useEffect(() => {
     if (!hydrated) return;
