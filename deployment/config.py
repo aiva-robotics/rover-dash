@@ -58,6 +58,9 @@ ARM_SECONDS = _float("RC_ARM_SECONDS", 2.0)
 WATCHDOG_TIMEOUT = _float("RC_WATCHDOG_TIMEOUT", 0.5)
 WATCHDOG_INTERVAL = _float("RC_WATCHDOG_INTERVAL", 0.1)
 
+# Delad hemlighet. Tom sträng = ingen autentisering (rekommenderas ej).
+AUTH_TOKEN = os.environ.get("RC_TOKEN", "").strip()
+
 # Endast en klient i taget får styra
 SINGLE_CLIENT = _bool("RC_SINGLE_CLIENT", True)
 # True = ny klient tar över styrningen, False = ny klient avvisas

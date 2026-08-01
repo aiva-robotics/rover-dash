@@ -1,6 +1,8 @@
 export type DriveCommand = {
   throttle: number; // -100..100
   steering: number; // -100..100
+  /** Nödstopp ingår i varje kommando så att servern alltid vet läget. */
+  estop?: boolean;
 };
 
 export type CarStatus = {
@@ -12,7 +14,12 @@ export type CarStatus = {
   heading?: number; // degrees, future IMU
   recording?: boolean;
   headlights?: boolean;
+  /** Serverns bekräftade nödstoppsläge. */
+  estop?: boolean;
+  armed?: boolean;
+  failsafe?: boolean;
 };
+
 
 export type ConnectionState = "connecting" | "connected" | "disconnected";
 

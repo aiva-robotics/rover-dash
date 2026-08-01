@@ -9,6 +9,8 @@ type Props = {
   onPhoto: () => void;
   onEmergencyStop: () => void;
   stopped: boolean;
+  /** True när bilen ännu inte kvitterat nödstoppsläget. */
+  pending?: boolean | undefined;
 };
 
 function ActionButton({
@@ -48,6 +50,7 @@ export function ControlButtons({
   onPhoto,
   onEmergencyStop,
   stopped,
+  pending,
 }: Props) {
   return (
     <div className="grid grid-cols-3 gap-2">
@@ -75,13 +78,14 @@ export function ControlButtons({
         onClick={onEmergencyStop}
         className={cn(
           "col-span-3 flex items-center justify-center gap-3 rounded-2xl border border-destructive/60 bg-destructive/20 py-5 text-sm font-bold uppercase tracking-[0.3em] text-destructive-foreground backdrop-blur-md transition-all active:scale-[0.99]",
+          pending && "animate-pulse ring-2 ring-destructive",
           stopped
             ? "animate-pulse bg-destructive/70"
             : "shadow-[0_0_30px_color-mix(in_oklab,var(--color-destructive)_35%,transparent)] hover:bg-destructive/35",
         )}
       >
         <OctagonAlert className="h-6 w-6" />
-        {stopped ? "Återställ nödstopp" : "Nödstopp"}
+        {pending ? "Väntar på bilens kvittens…" : stopped ? "Återställ nödstopp" : "Nödstopp"}
       </button>
     </div>
   );

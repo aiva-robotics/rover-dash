@@ -11,7 +11,7 @@ import { LogPanel } from "@/components/car/LogPanel";
 import { ConnectionHealthPanel } from "@/components/car/ConnectionHealthPanel";
 import { FuturePanels } from "@/components/car/FuturePanels";
 import { useCarSocket } from "@/hooks/useCarSocket";
-import { useSettings } from "@/hooks/useSettings";
+import { useSettings, withToken } from "@/hooks/useSettings";
 import { clamp } from "@/lib/car-protocol";
 
 export const Route = createFileRoute("/")({
@@ -54,7 +54,7 @@ function ControlStation() {
     log,
     reconnectNow,
   } = useCarSocket({
-    url: settings.wsUrl,
+    url: withToken(settings.wsUrl, settings.wsToken),
     enabled: hydrated,
     demoMode: settings.demoMode,
   });
@@ -82,9 +82,29 @@ function ControlStation() {
         clamp(steeringRaw * settings.sensitivity, -100, 100) * (settings.invertSteering ? -1 : 1),
       );
 
+  // Nödstoppet ingår i varje kommando (20 Hz) så att bilen får det även om
+  // ett enstaka action-meddelande går förlorat.
   useEffect(() => {
-    setCommand({ throttle, steering });
-  }, [throttle, steering, setCommand]);
+    setCommand({ throttle, steering, estop });
+  }, [throttle, steering, estop, setCommand]);
+
+  /** Servern har inte kvitterat nödstoppsläget ännu. */
+  const estopPending = online && (status.estop ?? false) !== estop;
+
+  const estopWarnedRef = useRef(false);
+  useEffect(() => {
+    if (!estopPending) {
+      estopWarnedRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (estopWarnedRef.current) return;
+      estopWarnedRef.current = true;
+      log("error", "Bilen har inte bekräftat nödstoppsläget – kontrollera anslutningen");
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [estopPending, log]);
+
 
   useEffect(() => {
     if (connection === "disconnected" && hydrated) {
@@ -195,6 +215,8 @@ function ControlStation() {
         disabled={locked}
         headlights={headlights}
         stopped={estop}
+        pending={estopPending}
+
         onToggleLights={() => {
           setHeadlights((v) => {
             sendAction("headlights", !v);
