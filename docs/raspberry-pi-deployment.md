@@ -225,6 +225,7 @@ http://raspberrypi.local:3000
 
 ## Troubleshooting
 
+- **`Cannot find module '.../lightningcss.linux-arm64-gnu.node'`**: Tailwind v4 compiles CSS with lightningcss, whose native binary is also an *optional* dependency. `pi-build.sh` now installs `lightningcss-linux-arm64-gnu` automatically; if it still fails, run a clean install as shown below.
 - **`Cannot find module './rolldown-binding.linux-arm64-gnu.node'`**: The build tool (Vite 8 / Rolldown) needs a native binary that is installed as an *optional* dependency. Do a clean install with optional deps enabled:
   ```bash
   cd ~/rc-control-app
