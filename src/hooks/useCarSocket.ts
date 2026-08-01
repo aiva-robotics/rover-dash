@@ -385,5 +385,16 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     [sendJson, log, demoMode],
   );
 
-  return { connection, status, ping, logs, health, setCommand, sendAction, log, reconnectNow };
+  return {
+    connection,
+    status,
+    ping,
+    logs,
+    health,
+    lastError,
+    setCommand,
+    sendAction,
+    log,
+    reconnectNow,
+  };
 }
