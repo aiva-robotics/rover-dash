@@ -93,6 +93,8 @@ export function TelemetryPanel({ status, connection, ping, error }: Props) {
         label="Ping"
         value={ping !== null ? `${ping} ms` : "—"}
       />
+      </div>
     </div>
+
   );
 }
