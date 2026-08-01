@@ -11,7 +11,7 @@ export type Settings = {
 };
 
 export const defaultSettings: Settings = {
-  wsUrl: "ws://192.168.4.1:81",
+  wsUrl: "ws://raspberrypi.local:81",
   videoUrl: "/camera/stream",
   maxSpeed: 100,
   sensitivity: 1,
@@ -20,7 +20,16 @@ export const defaultSettings: Settings = {
   demoMode: true,
 };
 
+/** Styrservern kör på samma Pi som webbappen – härled adressen från sidan. */
+export function localWsUrl(): string {
+  if (typeof window === "undefined") return defaultSettings.wsUrl;
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const host = window.location.hostname || "raspberrypi.local";
+  return `${proto}//${host}:81`;
+}
+
 const STORAGE_KEY = "rc-control-settings";
+
 
 type Ctx = {
   settings: Settings;
@@ -38,12 +47,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setSettings({ ...defaultSettings, ...JSON.parse(raw) });
+      if (raw) {
+        setSettings({ ...defaultSettings, ...JSON.parse(raw) });
+      } else {
+        setSettings({ ...defaultSettings, wsUrl: localWsUrl() });
+      }
     } catch {
       /* ignore */
     }
     setHydrated(true);
   }, []);
+
 
   useEffect(() => {
     if (!hydrated) return;

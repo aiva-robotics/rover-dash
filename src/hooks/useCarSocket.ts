@@ -30,6 +30,59 @@ export type SocketHealth = {
   packetLoss: number; // percent of unanswered pings
 };
 
+export type SocketErrorCode =
+  | "unreachable"
+  | "dropped"
+  | "busy"
+  | "taken_over"
+  | "invalid_url"
+  | "no_url";
+
+export type SocketError = {
+  code: SocketErrorCode;
+  title: string;
+  message: string;
+  hint: string;
+  url: string;
+  attempts: number;
+  at: number;
+};
+
+const ERROR_TEXT: Record<SocketErrorCode, { title: string; message: string; hint: string }> = {
+  unreachable: {
+    title: "Når inte styrservern",
+    message:
+      "Webbläsaren får ingen kontakt med bilens WebSocket-server. Servern kan vara stoppad, fel adress eller blockerad av nätverket.",
+    hint: "Kontrollera på Pi:n: sudo systemctl status rc-car-server",
+  },
+  dropped: {
+    title: "Anslutningen bröts",
+    message:
+      "Kontakten med bilen tappades. Bilen går automatiskt till nödstopp (neutral gas och styrning) via serverns watchdog.",
+    hint: "Kolla WiFi-signalen och: sudo journalctl -u rc-car-server -n 30",
+  },
+  busy: {
+    title: "Bilen är upptagen",
+    message: "En annan klient styr redan bilen. Servern tillåter bara en förare i taget.",
+    hint: "Stäng den andra fliken/enheten och försök igen.",
+  },
+  taken_over: {
+    title: "Styrningen övertagen",
+    message: "En annan klient tog över styrningen av bilen.",
+    hint: "Tryck Försök ansluta igen för att ta tillbaka kontrollen.",
+  },
+  invalid_url: {
+    title: "Ogiltig WebSocket-adress",
+    message: "Adressen kunde inte tolkas som en WebSocket-adress.",
+    hint: "Adressen ska börja med ws:// eller wss://, t.ex. ws://192.168.1.50:81",
+  },
+  no_url: {
+    title: "Ingen WebSocket-adress",
+    message: "Det finns ingen adress till bilens styrserver.",
+    hint: "Ange adressen under Inställningar.",
+  },
+};
+
 const initialHealth: SocketHealth = {
   attempts: 0,
   totalConnects: 0,
@@ -56,6 +109,7 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [health, setHealth] = useState<SocketHealth>(initialHealth);
   const [manualNonce, setManualNonce] = useState(0);
+  const [lastError, setLastError] = useState<SocketError | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const commandRef = useRef<DriveCommand>({ throttle: 0, steering: 0 });
@@ -65,6 +119,14 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
   const pingHistoryRef = useRef<number[]>([]);
   const pingsSentRef = useRef(0);
   const pongsRef = useRef(0);
+  const openedRef = useRef(false);
+  const serverErrorRef = useRef<SocketErrorCode | null>(null);
+
+  const raiseError = useCallback((code: SocketErrorCode, targetUrl: string, attempts: number) => {
+    const text = ERROR_TEXT[code];
+    setLastError({ code, ...text, url: targetUrl, attempts, at: Date.now() });
+  }, []);
+
 
   const log = useCallback((level: LogEntry["level"], message: string) => {
     setLogs((prev) =>
@@ -118,14 +180,18 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     retryRef.current = 0;
     socketRef.current?.close();
     socketRef.current = null;
+    serverErrorRef.current = null;
+    setLastError(null);
     setHealth((h) => ({ ...h, nextRetryAt: null, retryDelay: 0, attempts: 0 }));
     setManualNonce((n) => n + 1);
   }, []);
+
 
   // --- Demo mode: simulated vehicle -----------------------------------
   useEffect(() => {
     if (!demoMode || !enabled) return;
     setConnection("connecting");
+    setLastError(null);
     log("info", "Demoläge startat – simulerad bil");
     const start = setTimeout(() => {
       setConnection("connected");
@@ -167,8 +233,13 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
 
   // --- Real WebSocket --------------------------------------------------
   useEffect(() => {
-    if (demoMode || !enabled || !url) {
+    if (demoMode || !enabled) {
       setConnection("disconnected");
+      return;
+    }
+    if (!url) {
+      setConnection("disconnected");
+      raiseError("no_url", "", 0);
       return;
     }
     let closed = false;
@@ -184,10 +255,13 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
           : `Ansluter till ${url}`,
       );
       let sock: WebSocket;
+      openedRef.current = false;
+      serverErrorRef.current = null;
       try {
         sock = new WebSocket(url);
       } catch {
         log("error", "Ogiltig WebSocket-adress");
+        raiseError("invalid_url", url, retryRef.current);
         setConnection("disconnected");
         return;
       }
@@ -195,10 +269,12 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
 
       sock.onopen = () => {
         retryRef.current = 0;
+        openedRef.current = true;
         pingHistoryRef.current = [];
         pingsSentRef.current = 0;
         pongsRef.current = 0;
         setConnection("connected");
+        setLastError(null);
         setHealth((h) => ({
           ...h,
           attempts: 0,
@@ -223,6 +299,12 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
             recordPing(Math.round(Date.now() - Number(data.pong)));
             return;
           }
+          if (data.error === "busy" || data.error === "taken_over") {
+            serverErrorRef.current = data.error;
+            log("error", String(data.message ?? data.error));
+            raiseError(data.error, url, retryRef.current);
+            return;
+          }
           setStatus((prev) => ({ ...prev, ...data }));
         } catch {
           log("warn", "Kunde inte tolka meddelande från bilen");
@@ -244,6 +326,9 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
           retryDelay: delay,
           nextRetryAt: Date.now() + delay,
         }));
+        const code: SocketErrorCode =
+          serverErrorRef.current ?? (openedRef.current ? "dropped" : "unreachable");
+        raiseError(code, url, retryRef.current);
         log("warn", `Anslutningen bröts – nytt försök om ${Math.round(delay / 1000)} s`);
         timersRef.current.push(setTimeout(connect, delay));
       };
@@ -258,7 +343,8 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [url, enabled, demoMode, log, recordPing, manualNonce]);
+  }, [url, enabled, demoMode, log, recordPing, manualNonce, raiseError]);
+
 
   // --- Continuous command loop + ping ----------------------------------
   useEffect(() => {
@@ -299,5 +385,16 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     [sendJson, log, demoMode],
   );
 
-  return { connection, status, ping, logs, health, setCommand, sendAction, log, reconnectNow };
+  return {
+    connection,
+    status,
+    ping,
+    logs,
+    health,
+    lastError,
+    setCommand,
+    sendAction,
+    log,
+    reconnectNow,
+  };
 }

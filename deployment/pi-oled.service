@@ -1,0 +1,22 @@
+[Unit]
+Description=Pi OLED status display (IP + tjänststatus)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=__USER__
+ExecStart=/usr/bin/python3 __APP_DIR__/deployment/pi-oled-status.py
+Environment=OLED_ADDRESS=0x3C
+Environment=OLED_WIDTH=128
+Environment=OLED_HEIGHT=32
+Environment=OLED_I2C_PORT=1
+Environment=OLED_INTERVAL=5
+Environment=OLED_ROTATE=0
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+SupplementaryGroups=i2c
+
+[Install]
+WantedBy=multi-user.target

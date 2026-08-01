@@ -303,3 +303,113 @@ curl -I http://localhost:8080/snapshot
 - **"Device or resource busy":** något annat använder kameran — stoppa
   `libcamera-vid`/`motion` eller kör `sudo systemctl restart pi-camera`.
 - **Hackig bild på Pi 3:** sänk `CAM_FPS` till 15 och `CAM_QUALITY` till 60.
+
+---
+
+## Styrserver: styrservo + ESC (rc-car-server)
+
+Pi:n genererar RC-PWM (50 Hz, 1000–2000 µs) direkt till styrservot och ESC:n.
+
+### Koppling
+
+| Signal | GPIO (BCM) | Fysisk pin |
+| --- | --- | --- |
+| Styrservo (signal) | GPIO 18 | pin 12 |
+| ESC (signal) | GPIO 13 | pin 33 |
+| GND (båda) | GND | pin 6 / 34 |
+
+Mata **inte** servot från Pi:ns 5V-pin — använd ESC:ns BEC eller separat
+matning, och koppla ihop jorden med Pi:n.
+
+### Installation
+
+```bash
+bash scripts/pi-car-server-setup.sh
+```
+
+Skriptet installerar `pigpio` + `python3-websockets`, startar `pigpiod` och
+installerar tjänsten `rc-car-server` (startar automatiskt vid boot, port 81).
+
+Sätt **WebSocket-adress** i inställningarna till `ws://<pi-ip>:81` (eller tryck
+på snabbknappen "Pi WebSocket (samma värd)").
+
+### Beteende
+
+- Tar emot `{"throttle": -100..100, "steering": -100..100}` ~20 ggr/s.
+- Svarar `{"pong": ...}` på ping så appen kan mäta latens.
+- Skickar telemetri 5 ggr/s (hastighet, CPU-temp, WiFi-RSSI, status).
+- **Watchdog:** inga kommandon på 0,5 s → gas och styrning till neutral.
+- **En förare i taget** — en ny klient tar över och den gamla får ett tydligt
+  felmeddelande i appen.
+- ESC:n armeras med 2 s neutral vid start.
+
+Justera GPIO-pinnar, pulsintervall och timeouts med `sudo systemctl edit --full rc-car-server`.
+
+### Felsökning
+
+```bash
+sudo systemctl status rc-car-server
+journalctl -u rc-car-server -f
+systemctl status pigpiod          # måste vara aktiv
+```
+
+---
+
+## Statusskärm: 0.91" I2C OLED med IP-adress
+
+En liten SSD1306-skärm (128x32) visar Pi:ns hostname, IP-adress och status för
+webb-, kamera- och styrtjänsten — praktiskt när Pi:n körs utan bildskärm.
+
+### Koppling
+
+| OLED | Pi |
+| --- | --- |
+| VCC | 3.3 V (pin 1) |
+| GND | GND (pin 6) |
+| SDA | GPIO 2 (pin 3) |
+| SCL | GPIO 3 (pin 5) |
+
+### Installation
+
+```bash
+bash scripts/pi-oled-setup.sh
+```
+
+Skriptet aktiverar I2C, installerar `python3-luma.oled` + `i2c-tools`,
+kontrollerar att skärmen svarar och installerar tjänsten `pi-oled`.
+
+Skärmen visar:
+
+```
+raspberrypi
+192.168.1.42
+W+ C+ S+      (webb / kamera / styrserver)
+```
+
+### Felsökning
+
+```bash
+sudo i2cdetect -y 1        # skärmen ska synas på 0x3C (ibland 0x3D)
+journalctl -u pi-oled -f
+```
+
+Hittas skärmen på `0x3D`? Ändra `OLED_ADDRESS` med
+`sudo systemctl edit --full pi-oled` och starta om tjänsten.
+
+---
+
+## Uppdatera allt med ett kommando
+
+```bash
+bash scripts/pi-deploy-all.sh
+```
+
+Skriptet:
+
+1. hämtar senaste koden från GitHub (`GITHUB_TOKEN=xxx` för privata repon),
+2. bygger webbappen,
+3. installerar/uppdaterar alla systemd-tjänster (webb, kamera, styrserver, OLED),
+4. aktiverar dem så de startar vid boot och skriver ut en hälsokontroll.
+
+Användbara flaggor: `SKIP_BUILD=1`, `WITH_OLED=0`, `WITH_CAMERA=0`,
+`WITH_CAR_SERVER=0`, `BRANCH=main`.

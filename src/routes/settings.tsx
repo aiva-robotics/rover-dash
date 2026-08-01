@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, RotateCcw } from "lucide-react";
-import { useSettings } from "@/hooks/useSettings";
+import { localWsUrl, useSettings } from "@/hooks/useSettings";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -102,14 +102,31 @@ function SettingsPage() {
       </header>
 
       <section className="glass-panel space-y-4 p-4">
-        <Field label="WebSocket-adress" hint="Adressen till bilens styrserver.">
+        <Field label="WebSocket-adress" hint="Adressen till bilens styrserver (rc-car-server på Pi:n, port 81).">
           <input
             className={inputClass}
             value={settings.wsUrl}
             onChange={(e) => update({ wsUrl: e.target.value })}
-            placeholder="ws://192.168.4.1:81"
+            placeholder="ws://raspberrypi.local:81"
           />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => update({ wsUrl: localWsUrl() })}
+              className="glass-panel px-3 py-1.5 text-xs transition-colors hover:text-primary"
+            >
+              Pi WebSocket (samma värd)
+            </button>
+            <button
+              type="button"
+              onClick={() => update({ wsUrl: "ws://raspberrypi.local:81" })}
+              className="glass-panel px-3 py-1.5 text-xs transition-colors hover:text-primary"
+            >
+              raspberrypi.local:81
+            </button>
+          </div>
         </Field>
+
         <Field
           label="Videoadress"
           hint="MJPEG-ström från Raspberry Pi-kameran."
