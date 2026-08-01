@@ -191,6 +191,7 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
   useEffect(() => {
     if (!demoMode || !enabled) return;
     setConnection("connecting");
+    setLastError(null);
     log("info", "Demoläge startat – simulerad bil");
     const start = setTimeout(() => {
       setConnection("connected");
