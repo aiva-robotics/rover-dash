@@ -413,3 +413,16 @@ Skriptet:
 
 Användbara flaggor: `SKIP_BUILD=1`, `WITH_OLED=0`, `WITH_CAMERA=0`,
 `WITH_CAR_SERVER=0`, `BRANCH=main`.
+
+## Åtkomsttoken (autentisering)
+
+Utan token kan vem som helst på nätverket styra bilen. Sätt en delad hemlighet:
+
+```bash
+sudo systemctl edit --full rc-car-server   # ändra Environment=RC_TOKEN=minhemlighet
+sudo systemctl restart rc-car-server
+```
+
+Ange samma värde i appen under **Inställningar → Åtkomsttoken**. Appen lägger på
+det som `?token=...` på WebSocket-adressen; fel token ger felmeddelandet
+"Fel åtkomsttoken" i gränssnittet.
