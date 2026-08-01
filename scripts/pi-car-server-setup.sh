@@ -82,6 +82,16 @@ sudo systemctl restart "$SERVICE_NAME"
 sleep 3
 sudo systemctl --no-pager --full status "$SERVICE_NAME" || true
 
+if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+  echo
+  echo "!! Tjänsten startade inte. Senaste loggar:"
+  sudo journalctl -u "$SERVICE_NAME" -n 40 --no-pager || true
+  echo
+  echo "!! Testar att köra servern direkt för tydligt felmeddelande:"
+  (cd "$APP_DIR/deployment" && timeout 8 python3 rc-car-server.py || true)
+fi
+
+
 IP="$(hostname -I | awk '{print $1}')"
 cat <<EOF
 
