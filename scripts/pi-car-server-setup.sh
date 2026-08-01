@@ -7,12 +7,50 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_USER="${SUDO_USER:-$USER}"
 SERVICE_NAME="rc-car-server"
 
-echo "==> Installerar pigpio och python-beroenden"
+PIGPIO_VERSION="v79"
+
+echo "==> Uppdaterar paketförteckning"
 sudo apt-get update
-sudo apt-get install -y pigpio python3-pigpio python3-websockets
+
+echo "==> Installerar byggberoenden och python-paket"
+sudo apt-get install -y \
+  build-essential git wget unzip \
+  python3 python3-pip python3-venv python3-websockets || true
+
+echo "==> Säkerställer att pigpiod finns"
+if command -v pigpiod >/dev/null 2>&1; then
+  echo "pigpiod finns redan: $(command -v pigpiod)"
+elif apt-cache show pigpio >/dev/null 2>&1; then
+  echo "==> Installerar pigpio från apt"
+  sudo apt-get install -y pigpio python3-pigpio
+else
+  echo "==> pigpio finns inte i apt – bygger från källkod ($PIGPIO_VERSION)"
+  BUILD_DIR="$(mktemp -d)"
+  trap 'rm -rf "$BUILD_DIR"' EXIT
+
+  cd "$BUILD_DIR"
+  wget -q "https://github.com/joan2937/pigpio/archive/${PIGPIO_VERSION}.zip" -O pigpio.zip
+  unzip -q pigpio.zip
+  cd "pigpio-${PIGPIO_VERSION#v}"
+
+  echo "==> Kompilerar pigpio"
+  make -j"$(nproc)"
+
+  echo "==> Installerar pigpio"
+  sudo make install
+
+  echo "==> Installerar Python-klienten pigpio via pip"
+  sudo pip3 install --break-system-packages pigpio || sudo pip3 install pigpio || true
+fi
+
+# Se till att Python-klientbiblioteket finns även om vi byggde från källkod
+if ! python3 -c "import pigpio" 2>/dev/null; then
+  echo "==> Installerar Python-klienten pigpio"
+  sudo pip3 install --break-system-packages pigpio || sudo pip3 install pigpio
+fi
 
 echo "==> Startar pigpiod"
-sudo systemctl enable --now pigpiod
+sudo systemctl enable --now pigpiod || true
 sleep 1
 
 echo "==> Lägger till $RUN_USER i gruppen gpio"
