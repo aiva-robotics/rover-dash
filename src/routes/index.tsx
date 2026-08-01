@@ -166,7 +166,13 @@ function ControlStation() {
       </VideoFeed>
 
 
-      <TelemetryPanel status={status} connection={connection} ping={ping} />
+      <TelemetryPanel
+        status={status}
+        connection={connection}
+        ping={ping}
+        error={lastError}
+      />
+
 
       <div className="grid grid-cols-2 gap-2">
         <Joystick
@@ -225,6 +231,8 @@ function ControlStation() {
       <ConnectionLostOverlay
         visible={hydrated && (connection === "disconnected" || estop)}
         reason={estop ? "estop" : "connection"}
+        error={lastError}
+
         onReset={estop ? () => setEstop(false) : undefined}
         onRetry={reconnectNow}
         onDemoMode={() => {
