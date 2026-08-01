@@ -13,6 +13,11 @@ log "Using runner: $RUNNER"
 # With 2 GB of swap this is safe on a Pi 3 with 1 GB RAM.
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
 
+# The app is server-rendered, so a plain static folder is not enough.
+# Build a self-hosted Node server bundle (.output/server/index.mjs).
+export NITRO_PRESET="${NITRO_PRESET:-node-server}"
+log "Build target (NITRO_PRESET): $NITRO_PRESET"
+
 # IMPORTANT: optional dependencies MUST be installed.
 # Vite 8 uses Rolldown, whose native binary (@rolldown/binding-linux-arm64-gnu)
 # ships as an OPTIONAL dependency. Skipping optional deps causes:
