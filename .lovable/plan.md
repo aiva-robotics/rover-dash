@@ -1,55 +1,53 @@
 ## Mål
 
-En mobilanpassad kontrollstation för en RC-bil med ESP32-CAM: livevideo med HUD, två virtuella joysticks, snabbknappar, telemetri och en inställningssida. Allt i React + TypeScript med modulär struktur.
+Raspberry Pi 3 kör hela stacken: webbappen, MJPEG-kameran, WebSocket-servern som styr styrservo + ESC, och nu även en liten I2C-OLED (0.91", SSD1306 128x32) som visar Pi:ns IP-adress så du kan ansluta utan skärm.
 
-## Design
+## 1. WebSocket-server för RC-styrning (Python)
 
-- Mörkt tema, glasliknande paneler (glassmorphism), neonaccent i cyan/limegrön, röd för fara.
-- Tokens läggs i `src/styles.css` (mörkt som standard), monospace-siffror för telemetri.
-- Layout optimerad för mobil i stående läge, skalar upp till desktop (video + sidopanel).
+- `deployment/config.py` — GPIO 18 (styrservo), GPIO 13 (ESC), pulsintervall 1000–2000 µs, neutral 1500 µs, port 81, watchdog-timeout 500 ms.
+- `deployment/hardware.py` — `pigpio`-baserad RC-PWM (50 Hz). Mappar `-100..100` till µs, stöder framåt/bakåt på ESC:n, 2 s arm-sekvens i neutral vid start, `fail_safe()` som sätter båda till neutral.
+- `deployment/rc-car-server.py` — WebSocket-loop på `0.0.0.0:81`:
+  - Tar emot `{ "throttle": n, "steering": n }` och skriver direkt till PWM.
+  - Svarar `{ "pong": <timestamp> }` på `{ "ping": ... }` (matchar `useCarSocket`).
+  - Hanterar `action`-kommandon (strålkastare, tuta, bild, nödstopp).
+  - Skickar telemetri ~5 Hz: `speed`, `heading`, `temperature` (CPU-temp), `rssi` (från `iwconfig`), `recording`, `headlights`. Batteri lämnas tomt (ingen ADC).
+  - Watchdog: inga kommandon på 500 ms → neutral + nödstoppsflagga.
+  - En klient åt gången (nya anslutningar avvisas eller tar över kontrollerat).
+- `deployment/rc-car-server.service` — systemd-unit, startar efter `pigpiod`, `Restart=always`.
 
-## Sidor
+## 2. I2C-OLED med IP-adress (nytt)
 
-- `/` — Kontrollstation
-- `/settings` — Inställningar
+- `deployment/pi-oled-status.py` — Python-tjänst för SSD1306 128x32 på I2C (adress 0x3C, GPIO 2/3) via `luma.oled`:
+  - Rad 1: hostname
+  - Rad 2: aktiv IP (wlan0, fallback eth0) — stor/tydlig text
+  - Rad 3: statusindikatorer — webb (port 80), kamera (8080), WS (81) som `WEB ✓ CAM ✓ WS ✓`
+  - Uppdaterar var 5:e sekund, visar "Ingen IP" när nätverket är nere, rensar skärmen snyggt vid avstängning.
+- `deployment/pi-oled.service` — systemd-unit, startar vid boot, `Restart=always`.
+- `scripts/pi-oled-setup.sh` — aktiverar I2C (`raspi-config nonint do_i2c 0`), installerar `python3-luma.oled` + `i2c-tools`, kör `i2cdetect -y 1` som verifiering och visar tydligt fel om skärmen inte hittas, installerar och startar tjänsten.
 
-```text
-┌───────────────────────────┐
-│  16:9 video + HUD overlay │  batteri, wifi, km/h,
-│               [fullskärm] │  rattvinkel, gas, REC, kompass
-├───────────────────────────┤
-│  Telemetripanel (chips)   │  V, RSSI, status, hastighet, temp, ping
-├─────────────┬─────────────┤
-│ Gas/broms   │  Styrning   │  två joysticks
-├─────────────┴─────────────┤
-│ Ljus │ Tuta │ Foto │ STOP │
-└───────────────────────────┘
-```
+Kopplingsschema dokumenteras: VCC→3.3 V (pin 1), GND→pin 6, SDA→GPIO 2 (pin 3), SCL→GPIO 3 (pin 5).
 
-## Funktion
+## 3. Deploy-script från GitHub
 
-**Joysticks:** egen komponent med Pointer Events (touch + mus), fjädrar tillbaka till mitten vid släpp, vänster låst till Y-axel (gas/broms), höger till X-axel (styrning). Känslighet, maxhastighet och invertering appliceras från inställningarna.
+- `scripts/pi-deploy-all.sh` — ett kommando som:
+  1. `git pull` i repo-katalogen (stöder privat repo via `GITHUB_TOKEN`),
+  2. bygger webbappen (befintlig `pi-build.sh` med swap/minnesinställningar),
+  3. installerar/uppdaterar alla systemd-tjänster: webb, kamera, WS-server, OLED,
+  4. `systemctl daemon-reload` + `enable --now` på samtliga,
+  5. skriver ut hälsokontroll för varje tjänst och den IP som visas på OLED:en.
+- Kan köras om säkert (idempotent).
 
-**WebSocket:** en `useCarSocket`-hook som ansluter till adressen i inställningarna, skickar `{"throttle":-100,"steering":50}` ~20 ggr/sek (endast vid ändring eller hjärtslag), tar emot status-JSON (batteri, rssi, hastighet, temp) och mäter ping via ping/pong. Automatisk återanslutning med backoff.
+## 4. Tydliga felmeddelanden i appen vid WS-fel
 
-**Säkerhet:** vid avbruten anslutning visas en stor röd varningsoverlay, alla reglage inaktiveras, joysticks nollställs och gränssnittet markerar NÖDSTOPP. Nödstoppsknappen skickar stoppkommando och låser reglagen tills den kvitteras.
+- `src/hooks/useCarSocket.ts`: spara en strukturerad felorsak (kan ej nå servern, anslutning bruten, timeout/watchdog, avvisad av annan klient) plus antal återanslutningsförsök.
+- `src/components/car/ConnectionLostOverlay.tsx`: visa orsaken i klartext på svenska med konkret åtgärd ("Kontrollera att `rc-car-server` kör: `sudo systemctl status rc-car-server`"), samt adressen som testades. Behåll Försök igen / Demoläge.
+- `src/components/car/TelemetryPanel.tsx`: kort felstatus-chip.
 
-**Inställningar:** WebSocket-adress, videoadress, maxhastighet, joystickkänslighet, invertera styrning, invertera gas — sparas i Local Storage via en `SettingsProvider` (läses efter hydrering för att undvika SSR-krockar).
+## 5. Defaults och inställningar
 
-**Förberett för framtiden:** platshållarkort/flikar för GPS-karta, AI-objektdetektering, videoinspelning, flera kameror, batterihistorik och loggpanel — loggpanelen fungerar direkt (visar WebSocket-händelser), övriga visas som "kommer snart" med färdig struktur.
+- `src/hooks/useSettings.tsx`: `wsUrl` default till `ws://<samma host>:81` (härleds från `window.location.hostname`).
+- `src/routes/settings.tsx`: presetknappar för "Pi WebSocket (lokal)" och direktadress med IP.
 
-## Teknisk översikt
+## 6. Dokumentation
 
-```text
-src/routes/index.tsx          kontrollstation
-src/routes/settings.tsx       inställningar
-src/components/car/VideoFeed.tsx, DrivingHUD.tsx, Joystick.tsx,
-  ControlButtons.tsx, TelemetryPanel.tsx, ConnectionLostOverlay.tsx,
-  LogPanel.tsx, FuturePanels.tsx
-src/hooks/useCarSocket.ts, useSettings.tsx, useLocalStorage.ts
-src/lib/car-protocol.ts       typer + JSON-schema för kommandon/status
-```
-
-Ingen backend behövs — bilen är WebSocket-servern. Utan ansluten bil visar appen frånkopplat läge (och ett valfritt demoläge så gränssnittet går att testa).
-
-Varje route får egen SEO-metadata.
+- `docs/raspberry-pi-deployment.md`: nytt avsnitt om OLED (koppling, setup, felsökning `i2cdetect`), WS-serverns GPIO-koppling till servo/ESC, samt enkommandodeploy.
