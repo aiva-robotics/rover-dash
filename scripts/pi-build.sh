@@ -62,4 +62,13 @@ else
 fi
 
 log "Build complete. Output should be in dist/client/"
-log "Run 'npm run pi:serve' or 'scripts/pi-serve.sh' to start the local server."
+
+# Deploy the finished build locally (nginx web root) unless disabled with DEPLOY=false
+DEPLOY="${DEPLOY:-true}"
+if [ "$DEPLOY" = "true" ]; then
+  log "Deploying build..."
+  bash scripts/pi-deploy-local.sh
+else
+  log "DEPLOY=false — skipping deploy."
+  log "Run 'npm run pi:serve' or 'scripts/pi-serve.sh' to start the local server."
+fi
