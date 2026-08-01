@@ -17,11 +17,14 @@ import asyncio
 import json
 import logging
 import re
+import base64
 import hmac
+import os
 import signal
 import subprocess
 import sys
 import time
+import urllib.request
 from urllib.parse import parse_qs, urlparse
 
 import config
@@ -136,7 +139,8 @@ def telemetry() -> dict:
 
 # --- Kommandohantering ------------------------------------------------------
 def apply_command(throttle: float, steering: float) -> None:
-    state.throttle = clamp(float(throttle), -100.0, 100.0)
+    limit = clamp(config.MAX_THROTTLE, 0.0, 100.0)
+    state.throttle = clamp(float(throttle), -limit, limit)
     state.steering = clamp(float(steering), -100.0, 100.0)
     state.last_command = time.monotonic()
     state.failsafe = False
@@ -146,11 +150,50 @@ def apply_command(throttle: float, steering: float) -> None:
         outputs.apply(state.throttle, state.steering)
 
 
+def take_photo() -> str | None:
+    """Hämtar en stillbild från kameraservern och sparar den på disk."""
+    try:
+        os.makedirs(config.PHOTO_DIR, exist_ok=True)
+        name = time.strftime("photo-%Y%m%d-%H%M%S.jpg")
+        path = os.path.join(config.PHOTO_DIR, name)
+        with urllib.request.urlopen(config.SNAPSHOT_URL, timeout=5) as resp:
+            data = resp.read()
+        with open(path, "wb") as fh:
+            fh.write(data)
+        log.info("Bild sparad: %s (%d kB)", path, len(data) // 1024)
+        return path
+    except Exception as exc:
+        log.warning("Kunde inte ta bild: %s", exc)
+        return None
+
+
+async def handle_action_async(action: str, value, websocket) -> None:
+    """Åtgärder som kan blockera körs i en tråd."""
+    loop = asyncio.get_running_loop()
+    if action == "horn":
+        await loop.run_in_executor(None, outputs.horn, None)
+        return
+    if action == "photo":
+        path = await loop.run_in_executor(None, take_photo)
+        try:
+            await websocket.send(
+                json.dumps(
+                    {"photo": {"ok": path is not None, "path": path}}
+                )
+            )
+        except Exception:
+            pass
+        return
+    handle_action(action, value)
+
+
 def handle_action(action: str, value) -> None:
     if action == "estop":
         state.estop = True
         state.reset_controls()
         outputs.fail_safe()
+        outputs.accessories_off()
+        state.headlights = False
         log.warning("NÖDSTOPP aktiverat av klient")
     elif action == "resume":
         state.estop = False
@@ -159,11 +202,9 @@ def handle_action(action: str, value) -> None:
         log.info("Nödstopp återställt")
     elif action == "headlights":
         state.headlights = bool(value) if value is not None else not state.headlights
-        log.info("Strålkastare: %s", state.headlights)
+        outputs.set_lights(state.headlights)
     elif action == "horn":
-        log.info("Tuta")
-    elif action == "photo":
-        log.info("Bild begärd")
+        outputs.horn()
     else:
         log.info("Okänt kommando: %s", action)
 
@@ -199,12 +240,52 @@ def _request_path(websocket) -> str:
     return getattr(request, "path", None) or getattr(websocket, "path", "") or ""
 
 
+def _b64url_decode(value: str) -> str:
+    try:
+        padded = value + "=" * (-len(value) % 4)
+        return base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+    except Exception:
+        return ""
+
+
+def _offered_protocols(websocket) -> list[str]:
+    request = getattr(websocket, "request", None)
+    raw = ""
+    if request is not None:
+        try:
+            raw = request.headers.get("Sec-WebSocket-Protocol", "") or ""
+        except Exception:
+            raw = ""
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def _supplied_token(websocket) -> str:
+    """Token läses i första hand ur handskakningen (Sec-WebSocket-Protocol).
+
+    Query-parametern stöds bara för bakåtkompatibilitet – den kan läcka ut i
+    proxy- och åtkomstloggar och bör inte användas.
+    """
+    for proto in _offered_protocols(websocket):
+        if proto.startswith("rc-token."):
+            return _b64url_decode(proto[len("rc-token.") :])
+    query = urlparse(_request_path(websocket)).query
+    legacy = parse_qs(query).get("token", [""])[0]
+    if legacy:
+        log.warning("Klient skickade token i URL:en – uppdatera appen")
+    return legacy
+
+
+def select_subprotocol(_connection, subprotocols) -> str | None:
+    for proto in subprotocols or []:
+        if proto == "rc-control":
+            return "rc-control"
+    return None
+
+
 def _authorized(websocket) -> bool:
     if not config.AUTH_TOKEN:
         return True
-    query = urlparse(_request_path(websocket)).query
-    supplied = parse_qs(query).get("token", [""])[0]
-    return hmac.compare_digest(supplied, config.AUTH_TOKEN)
+    return hmac.compare_digest(_supplied_token(websocket), config.AUTH_TOKEN)
 
 
 async def handler(websocket) -> None:
@@ -274,7 +355,7 @@ async def handler(websocket) -> None:
 
             action = data.get("action")
             if isinstance(action, str):
-                handle_action(action, data.get("value"))
+                await handle_action_async(action, data.get("value"), websocket)
     except Exception as exc:  # websockets.ConnectionClosed m.m.
         log.info("Klientfel/frånkoppling: %s", exc.__class__.__name__)
     finally:
@@ -282,6 +363,8 @@ async def handler(websocket) -> None:
             active_client = None
             state.reset_controls()
             outputs.fail_safe()
+            outputs.accessories_off()
+            state.headlights = False
             state.failsafe = True
         log.info("Klient frånkopplad: %s – bilen i neutral", peer[0])
 
@@ -298,7 +381,14 @@ async def main() -> None:
         except NotImplementedError:  # pragma: no cover
             pass
 
-    async with serve(handler, config.HOST, config.PORT, ping_interval=20, ping_timeout=20):
+    async with serve(
+        handler,
+        config.HOST,
+        config.PORT,
+        ping_interval=20,
+        ping_timeout=20,
+        select_subprotocol=select_subprotocol,
+    ):
         log.info("WebSocket-server lyssnar på ws://%s:%s", config.HOST, config.PORT)
         if not config.AUTH_TOKEN:
             log.warning("RC_TOKEN är inte satt – vem som helst i nätverket kan styra bilen")
