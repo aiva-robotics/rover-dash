@@ -9,6 +9,7 @@
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-${GIT_TOKEN:-${PAT:-}}}"
 PROJECT_DIR="${PROJECT_DIR:-$HOME/rc-control-app}"
 BRANCH="${BRANCH:-main}"
 
@@ -16,10 +17,24 @@ if [ -z "$REPO_URL" ]; then
   echo "Error: REPO_URL is not set."
   echo "Set it to your GitHub repository URL, for example:"
   echo "  export REPO_URL=https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git"
+  echo ""
+  echo "For a private repository, also set a personal access token:"
+  echo "  export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx"
   exit 1
 fi
 
 log() { echo "[pi-clone-and-setup] $*"; }
+
+# Build an authenticated URL for HTTPS clones/pulls without leaking the token in logs.
+AUTH_URL="$REPO_URL"
+if [ -n "$GITHUB_TOKEN" ] && [[ "$REPO_URL" == https://github.com/* ]]; then
+  AUTH_URL="https://${GITHUB_TOKEN}@github.com/${REPO_URL#https://github.com/}"
+fi
+
+safe_url() {
+  # Strip any embedded token from a URL before printing it.
+  printf '%s\n' "$1" | sed -E 's#https://[^@]+@#https://#'
+}
 
 # 1. Clone or update
 if [ -d "$PROJECT_DIR/.git" ]; then
