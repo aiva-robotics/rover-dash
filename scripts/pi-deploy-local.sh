@@ -6,12 +6,31 @@ set -euo pipefail
 log() { echo "[pi-deploy] $*"; }
 
 WEB_ROOT="${PI_WEB_ROOT:-/var/www/rc-control}"
-BUILD_DIR="${BUILD_DIR:-dist/client}"
 
-if [ ! -d "$BUILD_DIR" ]; then
-  log "ERROR: build output not found at $BUILD_DIR. Run scripts/pi-build.sh first."
+# Locate the built client output. Different build targets place it in different
+# folders, so check the known candidates instead of assuming dist/client.
+BUILD_DIR="${BUILD_DIR:-}"
+if [ -z "$BUILD_DIR" ]; then
+  for candidate in dist/client .output/public dist/public build/client dist; do
+    if [ -f "$candidate/index.html" ]; then
+      BUILD_DIR="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "$BUILD_DIR" ] || [ ! -d "$BUILD_DIR" ]; then
+  log "ERROR: could not find build output (looked for index.html in dist/client, .output/public, dist/public, build/client, dist)."
+  log "Contents of the project directory:"
+  ls -la . || true
+  [ -d dist ] && { log "Contents of dist/:"; ls -la dist || true; }
+  [ -d .output ] && { log "Contents of .output/:"; ls -la .output || true; }
+  log "Run 'bash scripts/pi-build.sh' first, or set BUILD_DIR=/path/to/output."
   exit 1
 fi
+
+log "Using build output: $BUILD_DIR"
+
 
 if ! command -v nginx >/dev/null 2>&1; then
   log "nginx is not installed. Skipping web-root deploy."
