@@ -40,11 +40,23 @@ safe_url() {
 if [ -d "$PROJECT_DIR/.git" ]; then
   log "Repository already exists at $PROJECT_DIR. Pulling latest changes..."
   cd "$PROJECT_DIR"
-  git pull origin "$(git rev-parse --abbrev-ref HEAD)"
+
+  if [ -n "$GITHUB_TOKEN" ] && git remote get-url origin 2>/dev/null | grep -q '^https://github\.com/'; then
+    # Use a temporary GIT_ASKPASS helper so the token is not written to .git/config.
+    askpass_helper="$(mktemp)"
+    printf '#!/bin/sh\nif printf "%%s" "$1" | grep -qi password; then printf "%%s\\n" "%s"; else printf "%%s\\n" "x-access-token"; fi\n' "$GITHUB_TOKEN" > "$askpass_helper"
+    chmod +x "$askpass_helper"
+    GIT_ASKPASS="$askpass_helper" git pull origin "$(git rev-parse --abbrev-ref HEAD)"
+    rm -f "$askpass_helper"
+  else
+    git pull origin "$(git rev-parse --abbrev-ref HEAD)"
+  fi
 else
-  log "Cloning $REPO_URL into $PROJECT_DIR..."
-  git clone "$REPO_URL" "$PROJECT_DIR"
+  log "Cloning $(safe_url "$AUTH_URL") into $PROJECT_DIR..."
+  git clone "$AUTH_URL" "$PROJECT_DIR"
   cd "$PROJECT_DIR"
+  # Remove the token from the stored origin URL so it does not persist on disk.
+  git remote set-url origin "$REPO_URL"
   git checkout "$BRANCH" || true
 fi
 
