@@ -30,6 +30,59 @@ export type SocketHealth = {
   packetLoss: number; // percent of unanswered pings
 };
 
+export type SocketErrorCode =
+  | "unreachable"
+  | "dropped"
+  | "busy"
+  | "taken_over"
+  | "invalid_url"
+  | "no_url";
+
+export type SocketError = {
+  code: SocketErrorCode;
+  title: string;
+  message: string;
+  hint: string;
+  url: string;
+  attempts: number;
+  at: number;
+};
+
+const ERROR_TEXT: Record<SocketErrorCode, { title: string; message: string; hint: string }> = {
+  unreachable: {
+    title: "Når inte styrservern",
+    message:
+      "Webbläsaren får ingen kontakt med bilens WebSocket-server. Servern kan vara stoppad, fel adress eller blockerad av nätverket.",
+    hint: "Kontrollera på Pi:n: sudo systemctl status rc-car-server",
+  },
+  dropped: {
+    title: "Anslutningen bröts",
+    message:
+      "Kontakten med bilen tappades. Bilen går automatiskt till nödstopp (neutral gas och styrning) via serverns watchdog.",
+    hint: "Kolla WiFi-signalen och: sudo journalctl -u rc-car-server -n 30",
+  },
+  busy: {
+    title: "Bilen är upptagen",
+    message: "En annan klient styr redan bilen. Servern tillåter bara en förare i taget.",
+    hint: "Stäng den andra fliken/enheten och försök igen.",
+  },
+  taken_over: {
+    title: "Styrningen övertagen",
+    message: "En annan klient tog över styrningen av bilen.",
+    hint: "Tryck Försök ansluta igen för att ta tillbaka kontrollen.",
+  },
+  invalid_url: {
+    title: "Ogiltig WebSocket-adress",
+    message: "Adressen kunde inte tolkas som en WebSocket-adress.",
+    hint: "Adressen ska börja med ws:// eller wss://, t.ex. ws://192.168.1.50:81",
+  },
+  no_url: {
+    title: "Ingen WebSocket-adress",
+    message: "Det finns ingen adress till bilens styrserver.",
+    hint: "Ange adressen under Inställningar.",
+  },
+};
+
 const initialHealth: SocketHealth = {
   attempts: 0,
   totalConnects: 0,
