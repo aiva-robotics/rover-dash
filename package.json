@@ -14,7 +14,8 @@
     "deploy:pi": "bash scripts/deploy-to-pi.sh",
     "pi:setup": "bash scripts/pi-build-setup.sh",
     "pi:build": "bash scripts/pi-build.sh",
-    "pi:serve": "bash scripts/pi-serve.sh"
+    "pi:serve": "bash scripts/pi-serve.sh",
+    "pi:clone": "bash scripts/pi-clone-and-setup.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -79,9 +79,29 @@ bun run deploy:pi
 
 > ⚠️ **Warning:** A Pi 3 only has 1 GB RAM. The Vite/TanStack build is heavy and can take 10–30 minutes, or longer if swap is too small. A Pi 4/5 with more RAM is much more comfortable. The scripts below configure extra swap to make the build possible.
 
-### 1. Prepare the Pi
+### 1. Download the project from GitHub
 
-Copy the project to the Pi (or clone it with `git`), then SSH in and run the setup script:
+SSH into the Pi and clone your repository. Replace the URL below with your own repo URL:
+
+```bash
+cd ~
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git rc-control-app
+cd rc-control-app
+```
+
+> **Tip:** If your repository is private, use SSH instead (`git@github.com:YOUR_USERNAME/YOUR_REPO_NAME.git`) or create a [GitHub personal access token](https://github.com/settings/tokens) and clone with `https://<token>@github.com/YOUR_USERNAME/YOUR_REPO_NAME.git`.
+
+To update the app later after pushing changes from another machine:
+
+```bash
+cd ~/rc-control-app
+git pull
+bash scripts/pi-build.sh
+```
+
+### 2. Prepare the Pi
+
+Run the setup script inside the project directory:
 
 ```bash
 cd rc-control-app
