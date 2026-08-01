@@ -130,7 +130,7 @@ bash scripts/pi-build-setup.sh
 
 This installs Node.js, bun, nginx, git, and configures a 2 GB swap file.
 
-### 2. Build the app on the Pi
+### 3. Build the app on the Pi
 
 Inside the project directory on the Pi:
 
