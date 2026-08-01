@@ -180,9 +180,12 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
     retryRef.current = 0;
     socketRef.current?.close();
     socketRef.current = null;
+    serverErrorRef.current = null;
+    setLastError(null);
     setHealth((h) => ({ ...h, nextRetryAt: null, retryDelay: 0, attempts: 0 }));
     setManualNonce((n) => n + 1);
   }, []);
+
 
   // --- Demo mode: simulated vehicle -----------------------------------
   useEffect(() => {
