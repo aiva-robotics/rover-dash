@@ -365,6 +365,13 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
             recordPing(Math.round(Date.now() - Number(data.pong)));
             return;
           }
+          if (data.photo) {
+            log(
+              data.photo.ok ? "info" : "error",
+              data.photo.ok ? `Bild sparad på bilen: ${data.photo.path}` : "Bilen kunde inte ta bild",
+            );
+            return;
+          }
           if (
             data.error === "busy" ||
             data.error === "taken_over" ||

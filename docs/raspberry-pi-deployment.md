@@ -426,3 +426,24 @@ sudo systemctl restart rc-car-server
 Ange samma värde i appen under **Inställningar → Åtkomsttoken**. Appen lägger på
 det som `?token=...` på WebSocket-adressen; fel token ger felmeddelandet
 "Fel åtkomsttoken" i gränssnittet.
+
+## Tillbehör och säkerhet (uppdaterat)
+
+Nya miljövariabler för `rc-car-server.service`:
+
+| Variabel | Standard | Beskrivning |
+| --- | --- | --- |
+| `RC_LIGHTS_GPIO` | `23` | GPIO för strålkastare (-1 = av) |
+| `RC_HORN_GPIO` | `24` | GPIO för tuta/summer (-1 = av) |
+| `RC_LIGHTS_ACTIVE_LOW` / `RC_HORN_ACTIVE_LOW` | `false` | Sätt `true` för reläkort som är aktiva låga |
+| `RC_HORN_SECONDS` | `0.6` | Pipets längd |
+| `RC_SNAPSHOT_URL` | `http://127.0.0.1:8080/snapshot` | Källa för "Ta bild" |
+| `RC_PHOTO_DIR` | `/var/lib/rc-car/photos` | Där bilder sparas |
+| `RC_MAX_THROTTLE` | `100` | Serversidigt hastighetstak i procent |
+
+Åtkomsttoken skickas numera i WebSocket-handskakningen (`Sec-WebSocket-Protocol`)
+istället för i URL:en, så den hamnar inte i nginx- eller proxyloggar. Servern
+accepterar fortfarande `?token=` från äldre klienter men loggar en varning.
+
+Appen upptäcker även "halvöppna" anslutningar: om bilen slutar svara på ping
+inom 3,5 sekunder kopplas socketen ner, varningen visas och reglagen låses.
