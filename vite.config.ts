@@ -8,7 +8,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 // Allow self-hosted builds (e.g. Raspberry Pi) to pick another Nitro target,
 // for example: NITRO_PRESET=node-server npm run build
-const selfHostPreset = process.env.NITRO_PRESET;
+const selfHostPreset = process.env["NITRO_PRESET"];
 
 export default defineConfig({
   ...(selfHostPreset ? { nitro: { preset: selfHostPreset } } : {}),
