@@ -15,7 +15,7 @@ sudo apt-get update
 echo "==> Installerar byggberoenden och python-paket"
 sudo apt-get install -y \
   build-essential git wget unzip \
-  python3 python3-pip python3-venv python3-websockets || true
+  python3 python3-pip python3-venv python3-setuptools python3-websockets || true
 
 echo "==> Säkerställer att pigpiod finns"
 if command -v pigpiod >/dev/null 2>&1; then
@@ -33,6 +33,9 @@ else
   wget -q "https://github.com/joan2937/pigpio/archive/${PIGPIO_VERSION}.zip" -O pigpio.zip
   unzip -q pigpio.zip
   cd "pigpio-${PIGPIO_VERSION#v}"
+
+  echo "==> Patchar setup.py för Python 3.12+ (distutils borttaget)"
+  sed -i 's/from distutils.core import setup/from setuptools import setup/' setup.py
 
   echo "==> Kompilerar pigpio"
   make -j"$(nproc)"
