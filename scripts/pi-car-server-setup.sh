@@ -20,7 +20,8 @@ sudo apt-get install -y \
 echo "==> Säkerställer att pigpiod finns"
 if command -v pigpiod >/dev/null 2>&1; then
   echo "pigpiod finns redan: $(command -v pigpiod)"
-elif apt-cache show pigpio >/dev/null 2>&1; then
+elif apt-cache policy pigpio 2>/dev/null | grep -Eq 'Candidate: [^ ]+' && \
+     ! apt-cache policy pigpio 2>/dev/null | grep -q 'Candidate: (none)'; then
   echo "==> Installerar pigpio från apt"
   sudo apt-get install -y pigpio python3-pigpio
 else
