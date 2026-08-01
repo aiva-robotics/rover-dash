@@ -66,30 +66,30 @@ else
   npm run build
 fi
 
-BUILD_DIR=""
-for candidate in dist/client .output/public dist/public build/client dist; do
-  if [ -f "$candidate/index.html" ]; then
-    BUILD_DIR="$candidate"
+SERVER_ENTRY=""
+for candidate in .output/server/index.mjs dist/server/index.mjs; do
+  if [ -f "$candidate" ]; then
+    SERVER_ENTRY="$candidate"
     break
   fi
 done
 
-if [ -z "$BUILD_DIR" ]; then
-  log "ERROR: the build finished but no index.html was produced."
-  log "Checked: dist/client, .output/public, dist/public, build/client, dist"
+if [ -z "$SERVER_ENTRY" ]; then
+  log "ERROR: the build finished but no server bundle was produced."
+  log "Checked: .output/server/index.mjs, dist/server/index.mjs"
+  ls -la .output 2>/dev/null || true
   ls -la dist 2>/dev/null || true
   exit 1
 fi
 
-log "Build complete. Output: $BUILD_DIR"
-export BUILD_DIR
+log "Build complete. Server bundle: $SERVER_ENTRY"
 
-# Deploy the finished build locally (nginx web root) unless disabled with DEPLOY=false
+# Deploy the finished build locally unless disabled with DEPLOY=false
 DEPLOY="${DEPLOY:-true}"
 if [ "$DEPLOY" = "true" ]; then
   log "Deploying build..."
-  bash scripts/pi-deploy-local.sh
+  SERVER_ENTRY="$SERVER_ENTRY" bash scripts/pi-deploy-local.sh
 else
   log "DEPLOY=false — skipping deploy."
-  log "Run 'npm run pi:serve' or 'scripts/pi-serve.sh' to start the local server."
+  log "Run 'npm run pi:serve' or 'bash scripts/pi-deploy-local.sh' to start the app."
 fi
