@@ -11,7 +11,7 @@ import { LogPanel } from "@/components/car/LogPanel";
 import { ConnectionHealthPanel } from "@/components/car/ConnectionHealthPanel";
 import { FuturePanels } from "@/components/car/FuturePanels";
 import { useCarSocket } from "@/hooks/useCarSocket";
-import { useSettings, withToken } from "@/hooks/useSettings";
+import { useSettings } from "@/hooks/useSettings";
 import { clamp } from "@/lib/car-protocol";
 
 export const Route = createFileRoute("/")({
@@ -54,7 +54,8 @@ function ControlStation() {
     log,
     reconnectNow,
   } = useCarSocket({
-    url: withToken(settings.wsUrl, settings.wsToken),
+    url: settings.wsUrl,
+    token: settings.wsToken,
     enabled: hydrated,
     demoMode: settings.demoMode,
   });

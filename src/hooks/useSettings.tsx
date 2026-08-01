@@ -31,11 +31,10 @@ export function localWsUrl(): string {
   return `${proto}//${host}:81`;
 }
 
-/** Lägger på åtkomsttoken som query-parameter på WebSocket-adressen. */
-export function withToken(url: string, token: string): string {
-  if (!url || !token) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
-}
+/**
+ * Token skickas numera i WebSocket-handskakningen (Sec-WebSocket-Protocol)
+ * istället för i URL:en, så att den inte hamnar i loggar eller proxyhistorik.
+ */
 
 const STORAGE_KEY = "rc-control-settings";
 
