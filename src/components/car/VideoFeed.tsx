@@ -8,16 +8,61 @@ type Props = {
   children?: ReactNode | undefined;
 };
 
+type OrientationLockable = ScreenOrientation & {
+  lock?: (orientation: "landscape") => Promise<void>;
+};
+
 export function VideoFeed({ src, online, children }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Sant när enheten inte kan låsa orienteringen – då roterar vi bilden själva.
+  const [rotate, setRotate] = useState(false);
 
   // Ny videoadress → försök igen även om den förra strömmen misslyckades.
   useEffect(() => {
     setFailed(false);
   }, [src]);
   const isNativeFs = typeof document !== "undefined" && !!document.fullscreenElement;
+
+  const isMobile = () =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches;
+
+  const lockLandscape = async () => {
+    if (!isMobile()) return;
+    const orientation = screen.orientation as OrientationLockable | undefined;
+    try {
+      if (orientation?.lock) {
+        await orientation.lock("landscape");
+        setRotate(false);
+        return;
+      }
+    } catch {
+      // iOS Safari m.fl. tillåter inte orienteringslås.
+    }
+    setRotate(window.innerHeight > window.innerWidth);
+  };
+
+  const unlockOrientation = () => {
+    try {
+      screen.orientation?.unlock?.();
+    } catch {
+      // ignoreras
+    }
+    setRotate(false);
+  };
+
+  // Håll state i synk om användaren lämnar helskärm med systemgesten.
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement) {
+        setFullscreen(false);
+        unlockOrientation();
+      }
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
   const toggle = async () => {
     const el = wrapRef.current;
@@ -26,27 +71,52 @@ export function VideoFeed({ src, online, children }: Props) {
       if (document.fullscreenElement) {
         await document.exitFullscreen();
         setFullscreen(false);
+        unlockOrientation();
       } else if (el.requestFullscreen) {
         await el.requestFullscreen();
         setFullscreen(true);
+        await lockLandscape();
       } else {
         setFullscreen((v) => !v);
+        if (fullscreen) unlockOrientation();
+        else await lockLandscape();
       }
     } catch {
       // Fullscreen can be blocked (e.g. inside an embedded preview) – fall back
       // to an in-page expanded view instead of crashing.
       setFullscreen((v) => !v);
+      if (fullscreen) unlockOrientation();
+      else await lockLandscape();
     }
   };
+
+  const overlay = fullscreen && !isNativeFs;
 
   return (
     <div
       ref={wrapRef}
       className={cn(
         "glass-panel relative aspect-video w-full overflow-hidden bg-black/60",
-        fullscreen && !isNativeFs && "fixed inset-0 z-40 aspect-auto h-screen rounded-none",
+        overlay && "fixed inset-0 z-40 aspect-auto h-screen rounded-none",
+        fullscreen && rotate && "aspect-auto",
       )}
+      style={
+        fullscreen && rotate
+          ? {
+              position: "fixed",
+              top: 0,
+              left: 0,
+              zIndex: 40,
+              width: "100vh",
+              height: "100vw",
+              transform: "rotate(90deg) translateY(-100%)",
+              transformOrigin: "top left",
+              borderRadius: 0,
+            }
+          : undefined
+      }
     >
+
       {online && src && !failed ? (
         <img
           src={src}
