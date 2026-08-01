@@ -233,7 +233,8 @@ http://raspberrypi.local:3000
   bash scripts/pi-build.sh
   ```
   Make sure you are **not** setting `npm_config_optional=false` and that you run the 64-bit Raspberry Pi OS — check with `uname -m` (must print `aarch64`). On a 32-bit OS (`armv7l`) there is no prebuilt binary; either reflash with the 64-bit image or use the cross-build workflow (Option A).
-- **Cannot reach the page**: make sure the Pi firewall allows port 80/3000 and the device is on the same network.
+- **`build output not found at dist/client`**: older builds targeted Cloudflare and produced no static site. Pull the latest code and rebuild — `pi-build.sh` now sets `NITRO_PRESET=node-server` and produces `.output/server/index.mjs`.
+- **Cannot reach the page**: make sure the Pi firewall allows port 80/3000 and the device is on the same network. Check `sudo systemctl status rc-control`.
 - **Page loads but car does not connect**: the browser must be able to reach the ESP32/WebSocket address configured in Settings. The Pi only serves the web files; it does not proxy the car connection by default.
 - **Build fails with OOM / JavaScript heap out of memory**: The Pi 3 needs more swap. Run `scripts/pi-build-setup.sh` again to ensure the 2 GB swap file is active, or increase it further with `sudo dphys-swapfile swapoff && sudo nano /etc/dphys-swapfile`.
 - **Build takes forever**: This is expected on a Pi 3. Use the cross-build workflow (Option A) for faster iteration.
