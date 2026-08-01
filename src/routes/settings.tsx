@@ -110,14 +110,42 @@ function SettingsPage() {
             placeholder="ws://192.168.4.1:81"
           />
         </Field>
-        <Field label="Videoadress" hint="MJPEG-ström från ESP32-CAM.">
+        <Field
+          label="Videoadress"
+          hint="MJPEG-ström från ESP32-CAM eller Raspberry Pi-kameran."
+        >
           <input
             className={inputClass}
             value={settings.videoUrl}
             onChange={(e) => update({ videoUrl: e.target.value })}
             placeholder="http://192.168.4.1:81/stream"
           />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                update({
+                  videoUrl: `${window.location.protocol}//${window.location.hostname}/camera/stream`,
+                })
+              }
+              className="glass-panel px-3 py-1.5 text-xs transition-colors hover:text-primary"
+            >
+              Pi-kamera (via nginx)
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                update({
+                  videoUrl: `${window.location.protocol}//${window.location.hostname}:8080/stream`,
+                })
+              }
+              className="glass-panel px-3 py-1.5 text-xs transition-colors hover:text-primary"
+            >
+              Pi-kamera (port 8080)
+            </button>
+          </div>
         </Field>
+
       </section>
 
       <section className="glass-panel space-y-5 p-4">

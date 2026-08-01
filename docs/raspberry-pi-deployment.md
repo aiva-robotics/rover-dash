@@ -240,3 +240,66 @@ http://raspberrypi.local:3000
 - **Build fails with OOM / JavaScript heap out of memory**: The Pi 3 needs more swap. Run `scripts/pi-build-setup.sh` again to ensure the 2 GB swap file is active, or increase it further with `sudo dphys-swapfile swapoff && sudo nano /etc/dphys-swapfile`.
 - **Build takes forever**: This is expected on a Pi 3. Use the cross-build workflow (Option A) for faster iteration.
 
+
+## Raspberry Pi-kamera (MJPEG-stream)
+
+Appen visar video via en MJPEG-ström. På Pi:n körs en liten Python-server
+(`deployment/pi-camera-server.py`) som använder `picamera2` och levererar
+strömmen direkt i ett format webbläsaren förstår.
+
+### Installation
+
+```bash
+cd ~/rc-control        # projektmappen på Pi:n
+bash scripts/pi-camera-setup.sh
+```
+
+Skriptet installerar `python3-picamera2`, lägger till användaren i gruppen
+`video`, installerar systemd-tjänsten `pi-camera.service` och startar den.
+
+### Adresser
+
+| Endpoint | Beskrivning |
+| --- | --- |
+| `http://<pi-ip>:8080/stream` | MJPEG-ström |
+| `http://<pi-ip>:8080/snapshot` | Enstaka JPEG-bild |
+| `http://<pi-ip>:8080/health` | JSON-status |
+| `http://<pi-ip>/camera/stream` | Samma ström via nginx (rekommenderas) |
+
+Sätt **Videoadress** i appens inställningar — det finns två snabbknappar
+("Pi-kamera (via nginx)" och "Pi-kamera (port 8080)").
+
+Kör `sudo bash scripts/pi-deploy-local.sh` igen efter uppdateringen så att
+nginx får `/camera/`-proxyn.
+
+### Konfiguration
+
+Redigera miljövariablerna i tjänsten:
+
+```bash
+sudo systemctl edit --full pi-camera
+```
+
+| Variabel | Default | Beskrivning |
+| --- | --- | --- |
+| `CAM_WIDTH` / `CAM_HEIGHT` | 640 / 480 | Upplösning (Pi 3: håll dig ≤ 1280x720) |
+| `CAM_FPS` | 20 | Bildrutor per sekund |
+| `CAM_QUALITY` | 75 | JPEG-kvalitet (lägre = mindre bandbredd) |
+| `CAM_HFLIP` / `CAM_VFLIP` | 0 | Spegla bilden om kameran sitter upp och ner |
+
+Starta om efter ändring: `sudo systemctl restart pi-camera`
+
+### Felsökning
+
+```bash
+sudo systemctl status pi-camera
+journalctl -u pi-camera -f
+libcamera-hello --list-cameras     # hittas kameran?
+curl -I http://localhost:8080/snapshot
+```
+
+- **Ingen kamera hittas:** kontrollera flatkabeln (blå sida mot Ethernet-porten)
+  och att `camera_auto_detect=1` finns i `/boot/firmware/config.txt` (Bookworm).
+- **"Device or resource busy":** något annat använder kameran — stoppa
+  `libcamera-vid`/`motion` eller kör `sudo systemctl restart pi-camera`.
+- **Hackig bild på Pi 3:** sänk `CAM_FPS` till 15 och `CAM_QUALITY` till 60.
