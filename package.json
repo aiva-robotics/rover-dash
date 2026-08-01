@@ -11,7 +11,10 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "build:pi": "vite build",
-    "deploy:pi": "bash scripts/deploy-to-pi.sh"
+    "deploy:pi": "bash scripts/deploy-to-pi.sh",
+    "pi:setup": "bash scripts/pi-build-setup.sh",
+    "pi:build": "bash scripts/pi-build.sh",
+    "pi:serve": "bash scripts/pi-serve.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
