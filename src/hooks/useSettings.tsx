@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 export type Settings = {
   wsUrl: string;
+  /** Delad hemlighet (RC_TOKEN på Pi:n). Tom = ingen autentisering. */
+  wsToken: string;
   videoUrl: string;
   maxSpeed: number; // percent
   sensitivity: number; // 0.5 - 2
@@ -12,6 +14,7 @@ export type Settings = {
 
 export const defaultSettings: Settings = {
   wsUrl: "ws://raspberrypi.local:81",
+  wsToken: "",
   videoUrl: "/camera/stream",
   maxSpeed: 100,
   sensitivity: 1,
@@ -26,6 +29,12 @@ export function localWsUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.hostname || "raspberrypi.local";
   return `${proto}//${host}:81`;
+}
+
+/** Lägger på åtkomsttoken som query-parameter på WebSocket-adressen. */
+export function withToken(url: string, token: string): string {
+  if (!url || !token) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
 }
 
 const STORAGE_KEY = "rc-control-settings";
