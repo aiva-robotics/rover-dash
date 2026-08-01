@@ -39,6 +39,9 @@ class _SimPi:
     def set_servo_pulsewidth(self, gpio, us):  # noqa: D102
         log.debug("SIM gpio=%s pulse=%sus", gpio, us)
 
+    def write(self, gpio, level):  # noqa: D102
+        log.debug("SIM gpio=%s level=%s", gpio, level)
+
     def stop(self):  # noqa: D102
         pass
 
@@ -73,6 +76,9 @@ class RCOutputs:
             self.pi = pi
             self.pi.set_mode(config.STEERING_GPIO, pigpio.OUTPUT)
             self.pi.set_mode(config.ESC_GPIO, pigpio.OUTPUT)
+            for gpio in (config.LIGHTS_GPIO, config.HORN_GPIO):
+                if gpio >= 0:
+                    self.pi.set_mode(gpio, pigpio.OUTPUT)
 
         self.pi.set_PWM_frequency(config.STEERING_GPIO, config.PWM_FREQUENCY)
         self.pi.set_PWM_frequency(config.ESC_GPIO, config.PWM_FREQUENCY)
@@ -94,6 +100,7 @@ class RCOutputs:
 
     def close(self) -> None:
         try:
+            self.accessories_off()
             self.neutral()
             time.sleep(0.1)
             if self.pi:
@@ -131,6 +138,31 @@ class RCOutputs:
         self.pi.set_servo_pulsewidth(config.ESC_GPIO, config.ESC_MID_US)
         self.last_steering_us = config.STEERING_MID_US
         self.last_esc_us = config.ESC_MID_US
+
+    # -- tillbehör ---------------------------------------------------------
+    def _write(self, gpio: int, on: bool, active_low: bool) -> None:
+        if self.pi is None or gpio < 0:
+            return
+        level = (0 if on else 1) if active_low else (1 if on else 0)
+        try:
+            self.pi.write(gpio, level)
+        except Exception:  # pragma: no cover
+            log.exception("Kunde inte skriva GPIO %s", gpio)
+
+    def set_lights(self, on: bool) -> None:
+        self._write(config.LIGHTS_GPIO, on, config.LIGHTS_ACTIVE_LOW)
+        log.info("Strålkastare GPIO %s -> %s", config.LIGHTS_GPIO, on)
+
+    def horn(self, seconds: float | None = None) -> None:
+        """Blockerande pip – anropas via executor så event-loopen inte hakar upp sig."""
+        duration = config.HORN_SECONDS if seconds is None else float(seconds)
+        self._write(config.HORN_GPIO, True, config.HORN_ACTIVE_LOW)
+        time.sleep(max(0.05, min(3.0, duration)))
+        self._write(config.HORN_GPIO, False, config.HORN_ACTIVE_LOW)
+
+    def accessories_off(self) -> None:
+        self._write(config.LIGHTS_GPIO, False, config.LIGHTS_ACTIVE_LOW)
+        self._write(config.HORN_GPIO, False, config.HORN_ACTIVE_LOW)
 
     # alias
     fail_safe = neutral

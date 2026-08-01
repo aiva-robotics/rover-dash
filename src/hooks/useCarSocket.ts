@@ -8,9 +8,15 @@ const MAX_LOGS = 60;
 const MAX_RETRY_DELAY = 15000;
 const BASE_RETRY_DELAY = 1000;
 const PING_HISTORY = 20;
+// Om ingen pong kommer inom denna tid är länken "halvöppen" (t.ex. WiFi borta
+// utan TCP-FIN). Då tvingar vi fram en omkoppling istället för att låtsas att
+// bilen fortfarande lyssnar.
+const PONG_TIMEOUT = 3500;
 
 type Options = {
   url: string;
+  /** Delad hemlighet – skickas i WebSocket-handskakningen, aldrig i URL:en. */
+  token?: string;
   enabled: boolean;
   demoMode: boolean;
 };
@@ -35,6 +41,7 @@ export type SocketHealth = {
 export type SocketErrorCode =
   | "unreachable"
   | "dropped"
+  | "stale"
   | "busy"
   | "taken_over"
   | "unauthorized"
@@ -63,6 +70,12 @@ const ERROR_TEXT: Record<SocketErrorCode, { title: string; message: string; hint
     message:
       "Kontakten med bilen tappades. Bilen går automatiskt till nödstopp (neutral gas och styrning) via serverns watchdog.",
     hint: "Kolla WiFi-signalen och: sudo journalctl -u rc-car-server -n 30",
+  },
+  stale: {
+    title: "Bilen svarar inte",
+    message:
+      "Anslutningen ser öppen ut men bilen har slutat svara på ping. Sannolikt tappad WiFi-länk eller hängd styrserver – bilen går till nödstopp via watchdogen.",
+    hint: "Kolla WiFi-täckningen och: sudo systemctl status rc-car-server",
   },
   busy: {
     title: "Bilen är upptagen",
@@ -110,7 +123,16 @@ const initialHealth: SocketHealth = {
 
 let logId = 0;
 
-export function useCarSocket({ url, enabled, demoMode }: Options) {
+function toBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [status, setStatus] = useState<CarStatus>({});
   const [ping, setPing] = useState<number | null>(null);
@@ -127,6 +149,7 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
   const pingsSentRef = useRef(0);
   const pongsRef = useRef(0);
   const openedRef = useRef(false);
+  const lastPongRef = useRef(0);
   const serverErrorRef = useRef<SocketErrorCode | null>(null);
 
   // Buffrad UI-state: telemetri och statistik uppdateras i refs och
@@ -182,6 +205,7 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
   const recordPing = useCallback(
     (rtt: number) => {
       pingRef.current = rtt;
+      lastPongRef.current = Date.now();
       const hist = pingHistoryRef.current;
       hist.push(rtt);
       if (hist.length > PING_HISTORY) hist.shift();
@@ -299,7 +323,8 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
       openedRef.current = false;
       serverErrorRef.current = null;
       try {
-        sock = new WebSocket(url);
+        const protocols = token ? ["rc-control", `rc-token.${toBase64Url(token)}`] : undefined;
+        sock = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
       } catch {
         log("error", "Ogiltig WebSocket-adress");
         raiseError("invalid_url", url, retryRef.current);
@@ -314,6 +339,7 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
         pingHistoryRef.current = [];
         pingsSentRef.current = 0;
         pongsRef.current = 0;
+        lastPongRef.current = Date.now();
         setConnection("connected");
         setLastError(null);
         patchHealth({
@@ -337,6 +363,13 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
           if (data.pong) {
             pongsRef.current += 1;
             recordPing(Math.round(Date.now() - Number(data.pong)));
+            return;
+          }
+          if (data.photo) {
+            log(
+              data.photo.ok ? "info" : "error",
+              data.photo.ok ? `Bild sparad på bilen: ${data.photo.path}` : "Bilen kunde inte ta bild",
+            );
             return;
           }
           if (
@@ -387,7 +420,18 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [url, enabled, demoMode, log, recordPing, manualNonce, raiseError, patchHealth, flushNow]);
+  }, [
+    url,
+    token,
+    enabled,
+    demoMode,
+    log,
+    recordPing,
+    manualNonce,
+    raiseError,
+    patchHealth,
+    flushNow,
+  ]);
 
   // --- Continuous command loop + ping ----------------------------------
   // Kommandot skickas ALLTID med 20 Hz (även oförändrat) eftersom serverns
@@ -400,6 +444,20 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
       }
     }, SEND_INTERVAL);
     const heartbeat = setInterval(() => {
+      const sock = socketRef.current;
+      // Halvöppen anslutning: öppen socket men inga pong-svar.
+      if (
+        sock &&
+        sock.readyState === WebSocket.OPEN &&
+        lastPongRef.current > 0 &&
+        Date.now() - lastPongRef.current > PONG_TIMEOUT
+      ) {
+        log("error", "Bilen svarar inte på ping – kopplar ner och försöker igen");
+        serverErrorRef.current = "stale";
+        lastPongRef.current = 0;
+        sock.close();
+        return;
+      }
       if (sendJson({ ping: Date.now() })) {
         pingsSentRef.current += 1;
         const sent = pingsSentRef.current;
@@ -413,7 +471,7 @@ export function useCarSocket({ url, enabled, demoMode }: Options) {
       clearInterval(interval);
       clearInterval(heartbeat);
     };
-  }, [sendJson, demoMode, patchHealth]);
+  }, [sendJson, demoMode, patchHealth, log]);
 
   const sendAction = useCallback(
     (action: string, value?: unknown) => {

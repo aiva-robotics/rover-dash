@@ -16,13 +16,26 @@ export function VideoFeed({ src, online, children }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   // Sant när enheten inte kan låsa orienteringen – då roterar vi bilden själva.
   const [rotate, setRotate] = useState(false);
 
   // Ny videoadress → försök igen även om den förra strömmen misslyckades.
   useEffect(() => {
     setFailed(false);
+    setAttempt(0);
   }, [src]);
+
+  // MJPEG-strömmar dör tyst när kameraservern startas om. Ladda om strömmen
+  // automatiskt var 4:e sekund tills en bild kommer igenom igen.
+  useEffect(() => {
+    if (!failed || !online || !src) return;
+    const id = setTimeout(() => {
+      setFailed(false);
+      setAttempt((n) => n + 1);
+    }, 4000);
+    return () => clearTimeout(id);
+  }, [failed, online, src, attempt]);
   const isNativeFs = typeof document !== "undefined" && !!document.fullscreenElement;
 
   const isMobile = () =>
@@ -119,7 +132,8 @@ export function VideoFeed({ src, online, children }: Props) {
 
       {online && src && !failed ? (
         <img
-          src={src}
+          key={attempt}
+          src={attempt > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src}
           alt="Livevideo från bilens kamera"
           className="h-full w-full object-cover"
           onError={() => setFailed(true)}
@@ -131,6 +145,11 @@ export function VideoFeed({ src, online, children }: Props) {
             <p className="mt-2 text-xs uppercase tracking-[0.25em] text-muted-foreground">
               Ingen videosignal
             </p>
+            {online && src ? (
+              <p className="mt-1 text-[0.65rem] tracking-[0.15em] text-muted-foreground/70">
+                Försöker återansluta till kameran…{attempt > 0 ? ` (försök ${attempt})` : ""}
+              </p>
+            ) : null}
           </div>
         </div>
       )}

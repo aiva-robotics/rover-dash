@@ -53,10 +53,27 @@ ESC_DEADBAND = _float("RC_ESC_DEADBAND", 3.0)
 # Sekunder i neutral vid start så att ESC:n hinner armera
 ARM_SECONDS = _float("RC_ARM_SECONDS", 2.0)
 
+# --- Tillbehör (digitala utgångar) ----------------------------------------
+# Sätt till -1 för att stänga av respektive utgång.
+LIGHTS_GPIO = _int("RC_LIGHTS_GPIO", 23)
+HORN_GPIO = _int("RC_HORN_GPIO", 24)
+# True = utgången är aktiv låg (t.ex. reläkort)
+LIGHTS_ACTIVE_LOW = _bool("RC_LIGHTS_ACTIVE_LOW", False)
+HORN_ACTIVE_LOW = _bool("RC_HORN_ACTIVE_LOW", False)
+HORN_SECONDS = _float("RC_HORN_SECONDS", 0.6)
+
+# --- Kamera / stillbilder --------------------------------------------------
+SNAPSHOT_URL = os.environ.get("RC_SNAPSHOT_URL", "http://127.0.0.1:8080/snapshot")
+PHOTO_DIR = os.environ.get("RC_PHOTO_DIR", "/var/lib/rc-car/photos")
+
 # --- Säkerhet --------------------------------------------------------------
 # Om inget kommando tagits emot inom denna tid -> neutral (failsafe)
 WATCHDOG_TIMEOUT = _float("RC_WATCHDOG_TIMEOUT", 0.5)
 WATCHDOG_INTERVAL = _float("RC_WATCHDOG_INTERVAL", 0.1)
+
+# Serversidig hastighetsgräns (procent). Klientens maxSpeed går aldrig att
+# kringgå eftersom servern klipper här också.
+MAX_THROTTLE = _float("RC_MAX_THROTTLE", 100.0)
 
 # Delad hemlighet. Tom sträng = ingen autentisering (rekommenderas ej).
 AUTH_TOKEN = os.environ.get("RC_TOKEN", "").strip()
