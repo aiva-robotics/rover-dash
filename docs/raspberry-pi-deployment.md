@@ -101,6 +101,24 @@ git pull
 bash scripts/pi-build.sh
 ```
 
+### One-command clone + setup shortcut
+
+If you want the Pi to download, build, and serve the app in one go, SSH in and run:
+
+```bash
+export REPO_URL=https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/scripts/pi-clone-and-setup.sh | bash
+```
+
+Or, after cloning once, run the included script directly:
+
+```bash
+export REPO_URL=https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+bash scripts/pi-clone-and-setup.sh
+```
+
+This clones/updates the repo, installs dependencies, builds the app, configures nginx, and enables auto-start on boot.
+
 ### 2. Prepare the Pi
 
 Run the setup script inside the project directory:
