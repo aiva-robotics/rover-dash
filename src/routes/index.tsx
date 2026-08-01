@@ -82,9 +82,29 @@ function ControlStation() {
         clamp(steeringRaw * settings.sensitivity, -100, 100) * (settings.invertSteering ? -1 : 1),
       );
 
+  // Nödstoppet ingår i varje kommando (20 Hz) så att bilen får det även om
+  // ett enstaka action-meddelande går förlorat.
   useEffect(() => {
-    setCommand({ throttle, steering });
-  }, [throttle, steering, setCommand]);
+    setCommand({ throttle, steering, estop });
+  }, [throttle, steering, estop, setCommand]);
+
+  /** Servern har inte kvitterat nödstoppsläget ännu. */
+  const estopPending = online && (status.estop ?? false) !== estop;
+
+  const estopWarnedRef = useRef(false);
+  useEffect(() => {
+    if (!estopPending) {
+      estopWarnedRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (estopWarnedRef.current) return;
+      estopWarnedRef.current = true;
+      log("error", "Bilen har inte bekräftat nödstoppsläget – kontrollera anslutningen");
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [estopPending, log]);
+
 
   useEffect(() => {
     if (connection === "disconnected" && hydrated) {
