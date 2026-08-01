@@ -128,6 +128,22 @@ function SettingsPage() {
         </Field>
 
         <Field
+          label="Åtkomsttoken"
+          hint="Måste matcha RC_TOKEN på Pi:n. Lämna tomt om servern körs utan autentisering."
+        >
+          <input
+            className={inputClass}
+            type="password"
+            autoComplete="off"
+            value={settings.wsToken}
+            onChange={(e) => update({ wsToken: e.target.value })}
+            placeholder="valfri hemlighet"
+          />
+        </Field>
+
+
+
+        <Field
           label="Videoadress"
           hint="MJPEG-ström från Raspberry Pi-kameran."
         >
