@@ -1,39 +1,73 @@
 #!/usr/bin/env bash
-# Deploy an already-built RC Control Station bundle locally on the Raspberry Pi.
-# Copies dist/client to the nginx web root, installs the site config and reloads nginx.
+# Deploy the finished RC Control Station build locally on the Raspberry Pi.
+# The app is server-rendered, so this installs a systemd service that runs the
+# Node server (.output/server/index.mjs) and an nginx reverse proxy on port 80.
 set -euo pipefail
 
 log() { echo "[pi-deploy] $*"; }
 
-WEB_ROOT="${PI_WEB_ROOT:-/var/www/rc-control}"
-BUILD_DIR="${BUILD_DIR:-dist/client}"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$PROJECT_DIR"
 
-if [ ! -d "$BUILD_DIR" ]; then
-  log "ERROR: build output not found at $BUILD_DIR. Run scripts/pi-build.sh first."
+SERVER_ENTRY="${SERVER_ENTRY:-.output/server/index.mjs}"
+APP_PORT="${PORT:-3000}"
+SERVICE_USER="${SERVICE_USER:-$(id -un)}"
+
+if [ ! -f "$SERVER_ENTRY" ]; then
+  log "ERROR: server build not found at $PROJECT_DIR/$SERVER_ENTRY"
+  log "Build it first with:  NITRO_PRESET=node-server bash scripts/pi-build.sh"
+  [ -d .output ] && { log "Contents of .output/:"; ls -la .output || true; }
+  [ -d dist ] && { log "Contents of dist/:"; ls -la dist || true; }
   exit 1
 fi
 
-if ! command -v nginx >/dev/null 2>&1; then
-  log "nginx is not installed. Skipping web-root deploy."
-  log "Serve the build directly with: bash scripts/pi-serve.sh"
-  exit 0
-fi
+log "Server build found: $SERVER_ENTRY"
 
-log "Copying $BUILD_DIR -> $WEB_ROOT ..."
-sudo mkdir -p "$WEB_ROOT"
-if command -v rsync >/dev/null 2>&1; then
-  sudo rsync -a --delete "$BUILD_DIR/" "$WEB_ROOT/"
+# 1. systemd service that runs the app server
+log "Installing systemd service (user: $SERVICE_USER, port: $APP_PORT)..."
+sudo tee /etc/systemd/system/rc-control.service > /dev/null <<EOF
+[Unit]
+Description=RC Control Station web app
+After=network.target
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+WorkingDirectory=$PROJECT_DIR
+Environment=PORT=$APP_PORT
+Environment=NODE_ENV=production
+ExecStart=$(command -v node) $PROJECT_DIR/$SERVER_ENTRY
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable rc-control
+sudo systemctl restart rc-control
+
+# 2. nginx reverse proxy on port 80 (optional)
+if command -v nginx >/dev/null 2>&1; then
+  log "Installing nginx reverse proxy config..."
+  sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+  sudo cp deployment/nginx-rc-control.conf /etc/nginx/sites-available/rc-control.conf
+  sudo ln -sf /etc/nginx/sites-available/rc-control.conf /etc/nginx/sites-enabled/rc-control.conf
+  sudo rm -f /etc/nginx/sites-enabled/default
+  sudo nginx -t
+  sudo systemctl reload nginx || sudo systemctl restart nginx
+  URL="http://$(hostname -I | awk '{print $1}')"
 else
-  sudo rm -rf "${WEB_ROOT:?}/"*
-  sudo cp -r "$BUILD_DIR/." "$WEB_ROOT/"
+  log "nginx not installed — the app is available on port $APP_PORT only."
+  URL="http://$(hostname -I | awk '{print $1}'):$APP_PORT"
 fi
-sudo cp deployment/pi-server.js "$WEB_ROOT/" 2>/dev/null || true
 
-log "Installing nginx site config..."
-sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-sudo cp deployment/nginx-rc-control.conf /etc/nginx/sites-available/rc-control.conf
-sudo ln -sf /etc/nginx/sites-available/rc-control.conf /etc/nginx/sites-enabled/rc-control.conf
-sudo nginx -t
-sudo systemctl reload nginx || sudo systemctl restart nginx
-
-log "Deployed. App available at http://$(hostname -I | awk '{print $1}')"
+sleep 2
+if systemctl is-active --quiet rc-control; then
+  log "Deployed and running. Open $URL"
+else
+  log "ERROR: the rc-control service failed to start. Logs:"
+  sudo journalctl -u rc-control -n 30 --no-pager || true
+  exit 1
+fi

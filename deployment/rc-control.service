@@ -7,8 +7,8 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/rc-control-app
 Environment=PORT=3000
-Environment=ROOT=dist/client
-ExecStart=/usr/bin/node deployment/pi-server.js
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node .output/server/index.mjs
 Restart=on-failure
 RestartSec=5
 

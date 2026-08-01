@@ -13,6 +13,11 @@ log "Using runner: $RUNNER"
 # With 2 GB of swap this is safe on a Pi 3 with 1 GB RAM.
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
 
+# The app is server-rendered, so a plain static folder is not enough.
+# Build a self-hosted Node server bundle (.output/server/index.mjs).
+export NITRO_PRESET="${NITRO_PRESET:-node-server}"
+log "Build target (NITRO_PRESET): $NITRO_PRESET"
+
 # IMPORTANT: optional dependencies MUST be installed.
 # Vite 8 uses Rolldown, whose native binary (@rolldown/binding-linux-arm64-gnu)
 # ships as an OPTIONAL dependency. Skipping optional deps causes:
@@ -61,14 +66,30 @@ else
   npm run build
 fi
 
-log "Build complete. Output should be in dist/client/"
+SERVER_ENTRY=""
+for candidate in .output/server/index.mjs dist/server/index.mjs; do
+  if [ -f "$candidate" ]; then
+    SERVER_ENTRY="$candidate"
+    break
+  fi
+done
 
-# Deploy the finished build locally (nginx web root) unless disabled with DEPLOY=false
+if [ -z "$SERVER_ENTRY" ]; then
+  log "ERROR: the build finished but no server bundle was produced."
+  log "Checked: .output/server/index.mjs, dist/server/index.mjs"
+  ls -la .output 2>/dev/null || true
+  ls -la dist 2>/dev/null || true
+  exit 1
+fi
+
+log "Build complete. Server bundle: $SERVER_ENTRY"
+
+# Deploy the finished build locally unless disabled with DEPLOY=false
 DEPLOY="${DEPLOY:-true}"
 if [ "$DEPLOY" = "true" ]; then
   log "Deploying build..."
-  bash scripts/pi-deploy-local.sh
+  SERVER_ENTRY="$SERVER_ENTRY" bash scripts/pi-deploy-local.sh
 else
   log "DEPLOY=false — skipping deploy."
-  log "Run 'npm run pi:serve' or 'scripts/pi-serve.sh' to start the local server."
+  log "Run 'npm run pi:serve' or 'bash scripts/pi-deploy-local.sh' to start the app."
 fi

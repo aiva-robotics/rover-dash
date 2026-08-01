@@ -10,14 +10,15 @@ Run the RC Control Station web app locally on a Raspberry Pi 3 so you can contro
 
 ## How it works
 
-The app is a static React site. The Pi only serves the web files; the browser then connects directly to the ESP32-CAM/WebSocket server in the car.
+The app is server-rendered, so the Pi runs a small Node server (built with the `node-server` target) behind nginx on port 80. The browser still connects directly to the ESP32-CAM/WebSocket server in the car.
 
 You have two deployment options:
 
-1. **Cross-build (recommended)** — Build on your dev machine and copy the static files to the Pi. Fast and gentle on the Pi.
+1. **Cross-build (recommended)** — Build on your dev machine and copy the server bundle to the Pi. Fast and gentle on the Pi.
 2. **Native build** — Download the source to the Pi with `git` and build it there. Useful if you want to edit code directly on the Pi or do not have another computer.
 
 If you already pushed the project to GitHub and want the Pi to fetch and build it automatically, see the **One-command clone + setup** shortcut in Option B.
+
 
 ---
 
@@ -29,24 +30,17 @@ SSH into the Pi and run:
 
 ```bash
 sudo apt update
-sudo apt install -y nginx
+sudo apt install -y nginx nodejs
 sudo systemctl enable nginx
-```
-
-Create the web root folder:
-
-```bash
-sudo mkdir -p /var/www/rc-control
-sudo chown -R $USER:$USER /var/www/rc-control
 ```
 
 ### Deploy from your development machine
 
-Edit `scripts/deploy-to-pi.sh` and set:
+Set the target host (or edit `scripts/deploy-to-pi.sh`):
 
 ```bash
-PI_HOST=pi@raspberrypi.local
-PI_WEB_ROOT=/var/www/rc-control
+export PI_HOST=pi@raspberrypi.local
+export PI_APP_DIR=/home/pi/rc-control-app
 ```
 
 Use the Pi's IP address if `.local` does not resolve on your network.
@@ -54,11 +48,11 @@ Use the Pi's IP address if `.local` does not resolve on your network.
 Build and deploy:
 
 ```bash
-bun run build
+NITRO_PRESET=node-server bun run build
 bun run deploy:pi
 ```
 
-This copies `dist/client/` to the Pi and reloads nginx.
+This copies the `.output/` server bundle to the Pi, installs the `rc-control` systemd service and the nginx reverse proxy, and starts the app.
 
 Open the app on any device on the same network:
 
@@ -71,9 +65,10 @@ http://raspberrypi.local
 Run the same two commands again:
 
 ```bash
-bun run build
+NITRO_PRESET=node-server bun run build
 bun run deploy:pi
 ```
+
 
 ---
 
@@ -181,7 +176,13 @@ Inside the project directory on the Pi:
 bash scripts/pi-build.sh
 ```
 
-The script limits Node's memory usage and skips optional dependencies to reduce the chance of an out-of-memory error. When the build finishes it **deploys automatically**: the files in `dist/client/` are copied to `/var/www/rc-control`, the nginx site config is installed and nginx is reloaded.
+The script limits Node's memory usage, installs optional dependencies (needed for Rolldown), and builds a self-hosted Node server bundle (`NITRO_PRESET=node-server` → `.output/server/index.mjs`).
+
+When the build finishes it **deploys automatically**:
+
+- installs the `rc-control` systemd service that runs `.output/server/index.mjs` on port 3000 (auto-start on boot)
+- installs the nginx reverse proxy config on port 80 and reloads nginx
+- starts the service and verifies it is running
 
 Skip the deploy step with:
 
@@ -195,57 +196,30 @@ Deploy an existing build separately with:
 bash scripts/pi-deploy-local.sh   # or: npm run pi:deploy
 ```
 
-### 3. Serve the app
-
-#### With nginx (recommended for port 80)
+### 4. Managing the app
 
 ```bash
-sudo cp deployment/nginx-rc-control.conf /etc/nginx/sites-available/rc-control.conf
-sudo ln -sf /etc/nginx/sites-available/rc-control.conf /etc/nginx/sites-enabled/rc-control.conf
-sudo nginx -t && sudo systemctl reload nginx
+sudo systemctl status rc-control      # is it running?
+sudo journalctl -u rc-control -f      # live logs
+sudo systemctl restart rc-control     # restart after a rebuild
 ```
 
-#### With the built-in Node fallback server
+Run the server in the foreground (without systemd) with:
 
 ```bash
-bash scripts/pi-serve.sh
+bash scripts/pi-serve.sh              # PORT=3000 by default
 ```
-
-Or run it directly:
-
-```bash
-PORT=3000 ROOT=dist/client node deployment/pi-server.js
-```
-
-### 4. Start on boot (optional)
-
-Copy the included systemd service and enable it:
-
-```bash
-sudo cp deployment/rc-control.service /etc/systemd/system/rc-control.service
-sudo systemctl daemon-reload
-sudo systemctl enable rc-control
-sudo systemctl start rc-control
-```
-
-The app will now start automatically when the Pi boots.
 
 ---
 
-## No nginx? Use the tiny Node fallback
+## No nginx?
 
-If you prefer not to install nginx, copy the files to the Pi and run the included static server:
-
-```bash
-scp -r dist/client/* pi@raspberrypi.local:/var/www/rc-control/
-ssh pi@raspberrypi.local "node /var/www/rc-control/pi-server.js"
-```
-
-The fallback server listens on port 3000:
+The app also works without nginx — it just runs on port 3000 instead of 80:
 
 ```
 http://raspberrypi.local:3000
 ```
+
 
 ---
 
@@ -259,7 +233,8 @@ http://raspberrypi.local:3000
   bash scripts/pi-build.sh
   ```
   Make sure you are **not** setting `npm_config_optional=false` and that you run the 64-bit Raspberry Pi OS — check with `uname -m` (must print `aarch64`). On a 32-bit OS (`armv7l`) there is no prebuilt binary; either reflash with the 64-bit image or use the cross-build workflow (Option A).
-- **Cannot reach the page**: make sure the Pi firewall allows port 80/3000 and the device is on the same network.
+- **`build output not found at dist/client`**: older builds targeted Cloudflare and produced no static site. Pull the latest code and rebuild — `pi-build.sh` now sets `NITRO_PRESET=node-server` and produces `.output/server/index.mjs`.
+- **Cannot reach the page**: make sure the Pi firewall allows port 80/3000 and the device is on the same network. Check `sudo systemctl status rc-control`.
 - **Page loads but car does not connect**: the browser must be able to reach the ESP32/WebSocket address configured in Settings. The Pi only serves the web files; it does not proxy the car connection by default.
 - **Build fails with OOM / JavaScript heap out of memory**: The Pi 3 needs more swap. Run `scripts/pi-build-setup.sh` again to ensure the 2 GB swap file is active, or increase it further with `sudo dphys-swapfile swapoff && sudo nano /etc/dphys-swapfile`.
 - **Build takes forever**: This is expected on a Pi 3. Use the cross-build workflow (Option A) for faster iteration.
