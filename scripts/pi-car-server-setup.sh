@@ -34,6 +34,9 @@ else
   unzip -q pigpio.zip
   cd "pigpio-${PIGPIO_VERSION#v}"
 
+  echo "==> Patchar setup.py för Python 3.12+ (distutils borttaget)"
+  sed -i 's/from distutils.core import setup/from setuptools import setup/' setup.py
+
   echo "==> Kompilerar pigpio"
   make -j"$(nproc)"
 
