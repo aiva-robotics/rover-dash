@@ -176,7 +176,13 @@ Inside the project directory on the Pi:
 bash scripts/pi-build.sh
 ```
 
-The script limits Node's memory usage and skips optional dependencies to reduce the chance of an out-of-memory error. When the build finishes it **deploys automatically**: the files in `dist/client/` are copied to `/var/www/rc-control`, the nginx site config is installed and nginx is reloaded.
+The script limits Node's memory usage, installs optional dependencies (needed for Rolldown), and builds a self-hosted Node server bundle (`NITRO_PRESET=node-server` → `.output/server/index.mjs`).
+
+When the build finishes it **deploys automatically**:
+
+- installs the `rc-control` systemd service that runs `.output/server/index.mjs` on port 3000 (auto-start on boot)
+- installs the nginx reverse proxy config on port 80 and reloads nginx
+- starts the service and verifies it is running
 
 Skip the deploy step with:
 
@@ -190,57 +196,30 @@ Deploy an existing build separately with:
 bash scripts/pi-deploy-local.sh   # or: npm run pi:deploy
 ```
 
-### 3. Serve the app
-
-#### With nginx (recommended for port 80)
+### 4. Managing the app
 
 ```bash
-sudo cp deployment/nginx-rc-control.conf /etc/nginx/sites-available/rc-control.conf
-sudo ln -sf /etc/nginx/sites-available/rc-control.conf /etc/nginx/sites-enabled/rc-control.conf
-sudo nginx -t && sudo systemctl reload nginx
+sudo systemctl status rc-control      # is it running?
+sudo journalctl -u rc-control -f      # live logs
+sudo systemctl restart rc-control     # restart after a rebuild
 ```
 
-#### With the built-in Node fallback server
+Run the server in the foreground (without systemd) with:
 
 ```bash
-bash scripts/pi-serve.sh
+bash scripts/pi-serve.sh              # PORT=3000 by default
 ```
-
-Or run it directly:
-
-```bash
-PORT=3000 ROOT=dist/client node deployment/pi-server.js
-```
-
-### 4. Start on boot (optional)
-
-Copy the included systemd service and enable it:
-
-```bash
-sudo cp deployment/rc-control.service /etc/systemd/system/rc-control.service
-sudo systemctl daemon-reload
-sudo systemctl enable rc-control
-sudo systemctl start rc-control
-```
-
-The app will now start automatically when the Pi boots.
 
 ---
 
-## No nginx? Use the tiny Node fallback
+## No nginx?
 
-If you prefer not to install nginx, copy the files to the Pi and run the included static server:
-
-```bash
-scp -r dist/client/* pi@raspberrypi.local:/var/www/rc-control/
-ssh pi@raspberrypi.local "node /var/www/rc-control/pi-server.js"
-```
-
-The fallback server listens on port 3000:
+The app also works without nginx — it just runs on port 3000 instead of 80:
 
 ```
 http://raspberrypi.local:3000
 ```
+
 
 ---
 
