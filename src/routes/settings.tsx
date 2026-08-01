@@ -112,13 +112,13 @@ function SettingsPage() {
         </Field>
         <Field
           label="Videoadress"
-          hint="MJPEG-ström från ESP32-CAM eller Raspberry Pi-kameran."
+          hint="MJPEG-ström från Raspberry Pi-kameran."
         >
           <input
             className={inputClass}
             value={settings.videoUrl}
             onChange={(e) => update({ videoUrl: e.target.value })}
-            placeholder="http://192.168.4.1:81/stream"
+            placeholder="http://raspberrypi.local/camera/stream"
           />
           <div className="mt-2 flex flex-wrap gap-2">
             <button

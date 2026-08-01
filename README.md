@@ -6,7 +6,7 @@ Skapa en modern, mobilanpassad webbapplikation för att fjärrstyra en radiostyr
 
 Layout:
 
-- Överst visas en stor 16:9 livevideoström från en ESP32-CAM med möjlighet till helskärm.
+- Överst visas en stor 16:9 livevideoström från Raspberry Pi-kameran med möjlighet till helskärm.
 
 - Ovanpå videon ska en transparent Driving HUD visas med batterinivå, WiFi-signal, hastighet, styrvinkel, gaspådrag, inspelningsindikator och kompass (förberedd för framtida IMU).
 

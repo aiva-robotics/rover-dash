@@ -12,7 +12,7 @@ export type Settings = {
 
 export const defaultSettings: Settings = {
   wsUrl: "ws://192.168.4.1:81",
-  videoUrl: "http://192.168.4.1:81/stream",
+  videoUrl: "/camera/stream",
   maxSpeed: 100,
   sensitivity: 1,
   invertSteering: false,
