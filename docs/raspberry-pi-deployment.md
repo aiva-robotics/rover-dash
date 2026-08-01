@@ -91,29 +91,72 @@ git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git rc-control-app
 cd rc-control-app
 ```
 
-> **Tip:** If your repository is private, use SSH instead (`git@github.com:YOUR_USERNAME/YOUR_REPO_NAME.git`) or create a [GitHub personal access token](https://github.com/settings/tokens) and clone with `https://<token>@github.com/YOUR_USERNAME/YOUR_REPO_NAME.git`.
+#### Private repositories
+
+If your GitHub repository is private, use **one** of these methods on the Pi:
+
+**A. SSH key (recommended if you use the Pi often)**
+
+1. Generate or copy an SSH key to the Pi:
+   ```bash
+   ssh-keygen -t ed25519 -C "pi@raspberrypi"
+   cat ~/.ssh/id_ed25519.pub
+   ```
+2. Add the key in GitHub under **Settings → SSH and GPG keys → New SSH key**.
+3. Clone with the SSH URL:
+   ```bash
+   git clone git@github.com:YOUR_USERNAME/YOUR_REPO_NAME.git rc-control-app
+   ```
+
+**B. Personal access token (good for one-command setup)**
+
+1. Create a token in GitHub under **Settings → Developer settings → Personal access tokens → Tokens (classic)**. Give it at least the `repo` scope.
+2. On the Pi, export the token and run the helper script:
+   ```bash
+   export REPO_URL=https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+   export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+   bash scripts/pi-clone-and-setup.sh
+   ```
+   The script uses the token only during clone/pull and does **not** save it in `.git/config`.
+
+**C. Manual token clone**
+
+```bash
+cd ~
+git clone https://ghp_xxxxxxxxxxxxxxxxxxxx@github.com/YOUR_USERNAME/YOUR_REPO_NAME.git rc-control-app
+cd rc-control-app
+# Remove the token from the stored origin URL so it is not saved on disk
+git remote set-url origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+```
+
+> **Note:** The one-command `curl ... | bash` shortcut below only works for **public** repositories, because `raw.githubusercontent.com` cannot fetch files from a private repo without authentication.
 
 To update the app later after pushing changes from another machine:
 
 ```bash
 cd ~/rc-control-app
+# For a public repo or an SSH-cloned private repo:
 git pull
+# For a private HTTPS repo with a token:
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+bash scripts/pi-clone-and-setup.sh
 bash scripts/pi-build.sh
 ```
 
-### One-command clone + setup shortcut
+### One-command clone + setup shortcut (public repos only)
 
-If you want the Pi to download, build, and serve the app in one go, SSH in and run:
+If your repo is public and you want the Pi to download, build, and serve the app in one go, SSH in and run:
 
 ```bash
 export REPO_URL=https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
 curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/scripts/pi-clone-and-setup.sh | bash
 ```
 
-Or, after cloning once, run the included script directly:
+Or, after cloning once, run the included script directly (this works with `GITHUB_TOKEN` for private repos too):
 
 ```bash
 export REPO_URL=https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx   # only needed for private repos
 bash scripts/pi-clone-and-setup.sh
 ```
 
