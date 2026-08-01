@@ -21,7 +21,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Mobilanpassad kontrollstation för radiostyrd bil med ESP32-CAM: livevideo, HUD, joysticks och realtidstelemetri.",
+          "Mobilanpassad kontrollstation för radiostyrd bil med Raspberry Pi-kamera: livevideo, HUD, joysticks och realtidstelemetri.",
       },
       { property: "og:title", content: "RC Control Station — Fjärrstyr bil med FPV-kamera" },
       {
