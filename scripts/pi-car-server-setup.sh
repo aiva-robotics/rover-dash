@@ -15,7 +15,7 @@ sudo apt-get update
 echo "==> Installerar byggberoenden och python-paket"
 sudo apt-get install -y \
   build-essential git wget unzip \
-  python3 python3-pip python3-venv python3-websockets || true
+  python3 python3-pip python3-venv python3-setuptools python3-websockets || true
 
 echo "==> Säkerställer att pigpiod finns"
 if command -v pigpiod >/dev/null 2>&1; then
