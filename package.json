@@ -15,6 +15,7 @@
     "pi:setup": "bash scripts/pi-build-setup.sh",
     "pi:build": "bash scripts/pi-build.sh",
     "pi:serve": "bash scripts/pi-serve.sh",
+    "pi:deploy": "bash scripts/pi-deploy-local.sh",
     "pi:clone": "bash scripts/pi-clone-and-setup.sh"
   },
   "dependencies": {

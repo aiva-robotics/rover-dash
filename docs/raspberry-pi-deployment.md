@@ -181,7 +181,19 @@ Inside the project directory on the Pi:
 bash scripts/pi-build.sh
 ```
 
-The script limits Node's memory usage and skips optional dependencies to reduce the chance of an out-of-memory error.
+The script limits Node's memory usage and skips optional dependencies to reduce the chance of an out-of-memory error. When the build finishes it **deploys automatically**: the files in `dist/client/` are copied to `/var/www/rc-control`, the nginx site config is installed and nginx is reloaded.
+
+Skip the deploy step with:
+
+```bash
+DEPLOY=false bash scripts/pi-build.sh
+```
+
+Deploy an existing build separately with:
+
+```bash
+bash scripts/pi-deploy-local.sh   # or: npm run pi:deploy
+```
 
 ### 3. Serve the app
 
