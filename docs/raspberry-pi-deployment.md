@@ -15,7 +15,9 @@ The app is a static React site. The Pi only serves the web files; the browser th
 You have two deployment options:
 
 1. **Cross-build (recommended)** — Build on your dev machine and copy the static files to the Pi. Fast and gentle on the Pi.
-2. **Native build** — Copy the source to the Pi and build it there. Useful if you want to edit code directly on the Pi or do not have another computer.
+2. **Native build** — Download the source to the Pi with `git` and build it there. Useful if you want to edit code directly on the Pi or do not have another computer.
+
+If you already pushed the project to GitHub and want the Pi to fetch and build it automatically, see the **One-command clone + setup** shortcut in Option B.
 
 ---
 
