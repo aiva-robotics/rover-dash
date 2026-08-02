@@ -43,6 +43,11 @@ else
   echo "==> Installerar pigpio"
   sudo make install
 
+  echo "==> Registrerar /usr/local/lib i länkaren (annars exit 127)"
+  echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/pigpio.conf >/dev/null
+  sudo ldconfig
+
+
   echo "==> Installerar Python-klienten pigpio via pip"
   sudo pip3 install --break-system-packages pigpio || sudo pip3 install pigpio || true
 fi
