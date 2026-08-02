@@ -13,7 +13,7 @@ export type Settings = {
 };
 
 export const defaultSettings: Settings = {
-  wsUrl: "ws://raspberrypi.local:81",
+  wsUrl: "ws://192.168.1.146:81",
   wsToken: "",
   videoUrl: "/camera/stream",
   maxSpeed: 100,

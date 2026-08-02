@@ -107,7 +107,7 @@ function SettingsPage() {
             className={inputClass}
             value={settings.wsUrl}
             onChange={(e) => update({ wsUrl: e.target.value })}
-            placeholder="ws://raspberrypi.local:81"
+            placeholder="ws://192.168.1.146:81"
           />
           <div className="mt-2 flex flex-wrap gap-2">
             <button
@@ -119,7 +119,7 @@ function SettingsPage() {
             </button>
             <button
               type="button"
-              onClick={() => update({ wsUrl: "ws://raspberrypi.local:81" })}
+              onClick={() => update({ wsUrl: "ws://192.168.1.146:81" })}
               className="glass-panel px-3 py-1.5 text-xs transition-colors hover:text-primary"
             >
               raspberrypi.local:81
