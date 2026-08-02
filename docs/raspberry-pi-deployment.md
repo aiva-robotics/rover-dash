@@ -274,6 +274,15 @@ nginx får `/camera/`-proxyn.
 
 ### Konfiguration
 
+Du kan vända bilden på två ställen:
+
+1. **I appen (rekommenderat)** — gå till **Inställningar** och slå på
+   "Vänd bild horisontellt" / "Vänd bild vertikalt". Detta görs med CSS-transform
+   i webbläsaren och kostar ingen prestanda.
+2. **I kameran (hårdvarunivå)** — sätt `CAM_HFLIP=1` eller `CAM_VFLIP=1` i
+   tjänsten. Detta använder libcamera `Transform` och har i princip noll
+   prestandapåverkan.
+
 Redigera miljövariablerna i tjänsten:
 
 ```bash
@@ -285,7 +294,7 @@ sudo systemctl edit --full pi-camera
 | `CAM_WIDTH` / `CAM_HEIGHT` | 640 / 480 | Upplösning (Pi 3: håll dig ≤ 1280x720) |
 | `CAM_FPS` | 20 | Bildrutor per sekund |
 | `CAM_QUALITY` | 75 | JPEG-kvalitet (lägre = mindre bandbredd) |
-| `CAM_HFLIP` / `CAM_VFLIP` | 0 | Spegla bilden om kameran sitter upp och ner |
+| `CAM_HFLIP` / `CAM_VFLIP` | 0 | Spegla bilden i kameran (upp och ner / spegelvänd) |
 
 Starta om efter ändring: `sudo systemctl restart pi-camera`
 

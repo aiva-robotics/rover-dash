@@ -21,6 +21,12 @@ if ! libcamera-hello --list-cameras >/dev/null 2>&1; then
   echo "         På Bookworm: kameran autodetekteras (camera_auto_detect=1 i /boot/firmware/config.txt)."
 fi
 
+if [ -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+  echo "==> OBS: $SERVICE_NAME.service finns redan. Anpassade miljövariabler (t.ex. CAM_HFLIP)"
+  echo "    kommer att skrivas över. Använd 'sudo systemctl edit --full $SERVICE_NAME'"
+  echo "    efteråt om du vill behålla egna värden."
+fi
+
 echo "==> Installerar systemd-tjänsten $SERVICE_NAME"
 sed -e "s|__APP_DIR__|$APP_DIR|g" -e "s|__USER__|$RUN_USER|g" \
   "$APP_DIR/deployment/pi-camera.service" | sudo tee "/etc/systemd/system/$SERVICE_NAME.service" >/dev/null
