@@ -43,6 +43,11 @@ else
   echo "==> Installerar pigpio"
   sudo make install
 
+  echo "==> Registrerar /usr/local/lib i länkaren (annars exit 127)"
+  echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/pigpio.conf >/dev/null
+  sudo ldconfig
+
+
   echo "==> Installerar Python-klienten pigpio via pip"
   sudo pip3 install --break-system-packages pigpio || sudo pip3 install pigpio || true
 fi
@@ -62,11 +67,21 @@ if ! systemctl list-unit-files 2>/dev/null | grep -q '^pigpiod\.service'; then
 fi
 
 echo "==> Startar pigpiod"
+# Om pigpiod byggdes från källkod kan libpigpio.so saknas i länkarens cache -> exit 127
+if ! ldd "$(command -v pigpiod || echo /usr/local/bin/pigpiod)" 2>/dev/null | grep -q "not found"; then
+  :
+else
+  echo "==> Saknade delade bibliotek – kör ldconfig"
+  echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/pigpio.conf >/dev/null
+  sudo ldconfig
+fi
 sudo systemctl enable --now pigpiod || true
 sleep 2
 if ! pgrep -x pigpiod >/dev/null; then
   echo "!! pigpiod kunde inte startas – kör: sudo journalctl -u pigpiod -n 30"
+  ldd "$(command -v pigpiod || echo /usr/local/bin/pigpiod)" 2>&1 | grep "not found" || true
 fi
+
 
 
 echo "==> Lägger till $RUN_USER i gruppen gpio"
