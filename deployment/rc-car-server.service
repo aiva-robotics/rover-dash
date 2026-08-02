@@ -21,6 +21,10 @@ Environment=PYTHONUNBUFFERED=1
 Restart=always
 RestartSec=3
 SupplementaryGroups=gpio
+# Port 81 är en privilegierad port (<1024) – tillåt bindning utan att köra som root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
 
 [Install]
 WantedBy=multi-user.target
