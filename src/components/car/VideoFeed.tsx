@@ -138,6 +138,16 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
           src={attempt > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src}
           alt="Livevideo från bilens kamera"
           className="h-full w-full object-cover"
+          style={{
+            transform:
+              flipH && flipV
+                ? "scaleX(-1) scaleY(-1)"
+                : flipH
+                  ? "scaleX(-1)"
+                  : flipV
+                    ? "scaleY(-1)"
+                    : undefined,
+          }}
           onError={() => setFailed(true)}
         />
       ) : (
