@@ -22,7 +22,7 @@ log "Build target (NITRO_PRESET): $NITRO_PRESET"
 # Vite 8 uses Rolldown, whose native binary (@rolldown/binding-linux-arm64-gnu)
 # ships as an OPTIONAL dependency. Skipping optional deps causes:
 #   Cannot find module './rolldown-binding.linux-arm64-gnu.node'
-export npm_config_optional="true"
+unset npm_config_optional || true
 unset npm_config_omit || true
 
 # The Rolldown/Node binaries require a 64-bit OS. Raspberry Pi OS 32-bit (armv7l)
@@ -57,41 +57,42 @@ NAPI_ARCH="$( [ "$ARCH" = "x86_64" ] && echo x64 || echo arm64 )"
 # npm has a long-standing bug where optional native packages are skipped when
 # switching platforms/lock states (https://github.com/npm/cli/issues/4828).
 # Rolldown (Vite 8), lightningcss and @tailwindcss/oxide all ship their native
-# binary that way, so verify each one and install it explicitly if missing.
-ensure_binding() {
-  local label="$1" glob="$2" pkg="$3" version_from="$4"
-  # shellcheck disable=SC2086
-  if ls $glob >/dev/null 2>&1; then
-    return 0
-  fi
-  log "$label native binding missing — installing it explicitly..."
-  rm -f node_modules/.package-lock.json
-  local version=""
-  if [ -n "$version_from" ]; then
-    version="$(node -p "try{require('./node_modules/${version_from}/package.json').version}catch(e){''}" 2>/dev/null || true)"
-  fi
-  if [ -n "$version" ]; then
-    npm install --include=optional --no-save --no-audit --no-fund "${pkg}@${version}" || true
-  else
-    npm install --include=optional --no-save --no-audit --no-fund "$pkg" || true
-  fi
-  # shellcheck disable=SC2086
-  if ! ls $glob >/dev/null 2>&1; then
-    log "ERROR: $label native binding still missing ($pkg)."
-    log "Make sure you are on 64-bit Raspberry Pi OS with glibc (not musl/Alpine),"
-    log "then do a clean install:  rm -rf node_modules package-lock.json && bash scripts/pi-build.sh"
-    exit 1
-  fi
+# binary that way. Install every missing binding in ONE npm operation: separate
+# `npm install --no-save` calls prune the binding installed by the previous call.
+# Vite has its own nested Rolldown, so its version (not the root Rolldown version)
+# must determine the compatible native binary.
+package_version() {
+  node -p "try{require('./node_modules/$1/package.json').version}catch(e){''}" 2>/dev/null || true
 }
 
-ensure_binding "Rolldown" "node_modules/@rolldown/binding-linux-*/*.node" \
-  "@rolldown/binding-linux-${NAPI_ARCH}-gnu" "rolldown"
-ensure_binding "lightningcss" "node_modules/lightningcss-linux-*/*.node" \
-  "lightningcss-linux-${NAPI_ARCH}-gnu" "lightningcss"
-ensure_binding "Tailwind oxide" "node_modules/@tailwindcss/oxide-linux-*/*.node" \
-  "@tailwindcss/oxide-linux-${NAPI_ARCH}-gnu" "@tailwindcss/oxide"
+ROLLDOWN_VERSION="$(package_version 'vite/node_modules/rolldown')"
+LIGHTNING_VERSION="$(package_version '@tailwindcss/node/node_modules/lightningcss')"
+[ -n "$LIGHTNING_VERSION" ] || LIGHTNING_VERSION="$(package_version 'lightningcss')"
+OXIDE_VERSION="$(package_version '@tailwindcss/oxide')"
 
+NATIVE_PACKAGES=()
+[ -n "$ROLLDOWN_VERSION" ] && NATIVE_PACKAGES+=("@rolldown/binding-linux-${NAPI_ARCH}-gnu@${ROLLDOWN_VERSION}")
+[ -n "$LIGHTNING_VERSION" ] && NATIVE_PACKAGES+=("lightningcss-linux-${NAPI_ARCH}-gnu@${LIGHTNING_VERSION}")
+[ -n "$OXIDE_VERSION" ] && NATIVE_PACKAGES+=("@tailwindcss/oxide-linux-${NAPI_ARCH}-gnu@${OXIDE_VERSION}")
 
+if [ "${#NATIVE_PACKAGES[@]}" -ne 3 ]; then
+  log "ERROR: Could not determine all native dependency versions."
+  exit 1
+fi
+
+log "Ensuring compatible native bindings: ${NATIVE_PACKAGES[*]}"
+npm install --include=optional --no-save --package-lock=false --no-audit --no-fund "${NATIVE_PACKAGES[@]}"
+
+# Check module resolution, not just a broad filename glob. The previous check
+# could accept the wrong Rolldown ABI version while Vite's nested copy still failed.
+for pkg in "${NATIVE_PACKAGES[@]}"; do
+  name="${pkg%@*}"
+  if ! node -e "require('$name')" >/dev/null 2>&1; then
+    log "ERROR: Native binding cannot be loaded: $name"
+    log "Do a clean retry: rm -rf node_modules package-lock.json && bash scripts/pi-build.sh"
+    exit 1
+  fi
+done
 
 log "Building production bundle..."
 if [ "$RUNNER" = "bun" ]; then
