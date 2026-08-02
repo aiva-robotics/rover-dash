@@ -42,44 +42,55 @@ log "Installing dependencies (this may take several minutes on a Pi)..."
 if [ "$RUNNER" = "bun" ]; then
   bun install
 else
+  # `npm ci` fails when package-lock.json is out of sync with package.json
+  # (common after a git pull that bumps a dependency). Fall back to a normal
+  # install, and as a last resort regenerate the lock file from scratch.
   npm ci --include=optional --prefer-offline --no-audit --no-fund \
-    || npm install --include=optional --prefer-offline --no-audit --no-fund
+    || npm install --include=optional --prefer-offline --no-audit --no-fund \
+    || { log "Install failed — regenerating package-lock.json from scratch..."
+         rm -rf node_modules package-lock.json
+         npm install --include=optional --no-audit --no-fund; }
 fi
 
 NAPI_ARCH="$( [ "$ARCH" = "x86_64" ] && echo x64 || echo arm64 )"
 
-# Verify the Rolldown native binding is actually present before building.
-if ! ls node_modules/@rolldown/binding-linux-*/*.node >/dev/null 2>&1; then
-  log "Rolldown native binding missing — reinstalling it explicitly..."
-  rm -rf node_modules/.package-lock.json
-  npm install --include=optional --no-audit --no-fund "@rolldown/binding-linux-${NAPI_ARCH}-gnu" || true
-fi
-
-if ! ls node_modules/@rolldown/binding-linux-*/*.node >/dev/null 2>&1; then
-  log "ERROR: Rolldown native binding still missing."
-  log "Try a clean install:  rm -rf node_modules package-lock.json && bash scripts/pi-build.sh"
-  exit 1
-fi
-
-# Tailwind v4 compiles CSS with lightningcss, which also ships its native
-# binary as an OPTIONAL dependency. Missing it causes:
-#   Cannot find module '../lightningcss.linux-arm64-gnu.node'
-if ! ls node_modules/lightningcss-linux-*/*.node >/dev/null 2>&1; then
-  log "lightningcss native binding missing — installing it explicitly..."
-  LCSS_VERSION="$(node -p "try{require('./node_modules/lightningcss/package.json').version}catch(e){''}" 2>/dev/null || true)"
-  if [ -n "$LCSS_VERSION" ]; then
-    npm install --include=optional --no-save --no-audit --no-fund "lightningcss-linux-${NAPI_ARCH}-gnu@${LCSS_VERSION}" || true
-  else
-    npm install --include=optional --no-save --no-audit --no-fund "lightningcss-linux-${NAPI_ARCH}-gnu" || true
+# npm has a long-standing bug where optional native packages are skipped when
+# switching platforms/lock states (https://github.com/npm/cli/issues/4828).
+# Rolldown (Vite 8), lightningcss and @tailwindcss/oxide all ship their native
+# binary that way, so verify each one and install it explicitly if missing.
+ensure_binding() {
+  local label="$1" glob="$2" pkg="$3" version_from="$4"
+  # shellcheck disable=SC2086
+  if ls $glob >/dev/null 2>&1; then
+    return 0
   fi
-fi
+  log "$label native binding missing — installing it explicitly..."
+  rm -f node_modules/.package-lock.json
+  local version=""
+  if [ -n "$version_from" ]; then
+    version="$(node -p "try{require('./node_modules/${version_from}/package.json').version}catch(e){''}" 2>/dev/null || true)"
+  fi
+  if [ -n "$version" ]; then
+    npm install --include=optional --no-save --no-audit --no-fund "${pkg}@${version}" || true
+  else
+    npm install --include=optional --no-save --no-audit --no-fund "$pkg" || true
+  fi
+  # shellcheck disable=SC2086
+  if ! ls $glob >/dev/null 2>&1; then
+    log "ERROR: $label native binding still missing ($pkg)."
+    log "Make sure you are on 64-bit Raspberry Pi OS with glibc (not musl/Alpine),"
+    log "then do a clean install:  rm -rf node_modules package-lock.json && bash scripts/pi-build.sh"
+    exit 1
+  fi
+}
 
-if ! ls node_modules/lightningcss-linux-*/*.node >/dev/null 2>&1; then
-  log "ERROR: lightningcss native binding still missing."
-  log "Make sure you are on 64-bit Raspberry Pi OS with glibc (not musl/Alpine),"
-  log "then do a clean install:  rm -rf node_modules package-lock.json && bash scripts/pi-build.sh"
-  exit 1
-fi
+ensure_binding "Rolldown" "node_modules/@rolldown/binding-linux-*/*.node" \
+  "@rolldown/binding-linux-${NAPI_ARCH}-gnu" "rolldown"
+ensure_binding "lightningcss" "node_modules/lightningcss-linux-*/*.node" \
+  "lightningcss-linux-${NAPI_ARCH}-gnu" "lightningcss"
+ensure_binding "Tailwind oxide" "node_modules/@tailwindcss/oxide-linux-*/*.node" \
+  "@tailwindcss/oxide-linux-${NAPI_ARCH}-gnu" "@tailwindcss/oxide"
+
 
 
 log "Building production bundle..."
