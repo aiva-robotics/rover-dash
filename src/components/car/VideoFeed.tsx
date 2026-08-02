@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 type Props = {
   src: string;
   online: boolean;
+  flipH?: boolean;
+  flipV?: boolean;
   children?: ReactNode | undefined;
 };
 
@@ -12,7 +14,7 @@ type OrientationLockable = ScreenOrientation & {
   lock?: (orientation: "landscape") => Promise<void>;
 };
 
-export function VideoFeed({ src, online, children }: Props) {
+export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [failed, setFailed] = useState(false);
