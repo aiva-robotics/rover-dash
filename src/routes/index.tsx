@@ -176,7 +176,12 @@ function ControlStation() {
         </Link>
       </header>
 
-      <VideoFeed src={settings.videoUrl} online={online || settings.demoMode}>
+      <VideoFeed
+        src={settings.videoUrl}
+        online={online || settings.demoMode}
+        flipH={settings.videoFlipH}
+        flipV={settings.videoFlipV}
+      >
         <DrivingHUD
           status={status}
           throttle={throttle}

@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 type Props = {
   src: string;
   online: boolean;
+  flipH?: boolean;
+  flipV?: boolean;
   children?: ReactNode | undefined;
 };
 
@@ -12,7 +14,7 @@ type OrientationLockable = ScreenOrientation & {
   lock?: (orientation: "landscape") => Promise<void>;
 };
 
-export function VideoFeed({ src, online, children }: Props) {
+export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -136,6 +138,16 @@ export function VideoFeed({ src, online, children }: Props) {
           src={attempt > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src}
           alt="Livevideo från bilens kamera"
           className="h-full w-full object-cover"
+          style={{
+            transform:
+              flipH && flipV
+                ? "scaleX(-1) scaleY(-1)"
+                : flipH
+                  ? "scaleX(-1)"
+                  : flipV
+                    ? "scaleY(-1)"
+                    : undefined,
+          }}
           onError={() => setFailed(true)}
         />
       ) : (

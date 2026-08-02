@@ -5,6 +5,10 @@ export type Settings = {
   /** Delad hemlighet (RC_TOKEN på Pi:n). Tom = ingen autentisering. */
   wsToken: string;
   videoUrl: string;
+  /** Vänd kamerabilden horisontellt i appen (CSS-transform, ingen prestandaförlust). */
+  videoFlipH: boolean;
+  /** Vänd kamerabilden vertikalt i appen (CSS-transform, ingen prestandaförlust). */
+  videoFlipV: boolean;
   maxSpeed: number; // percent
   sensitivity: number; // 0.5 - 2
   invertSteering: boolean;
@@ -16,6 +20,8 @@ export const defaultSettings: Settings = {
   wsUrl: "ws://192.168.1.146:81",
   wsToken: "",
   videoUrl: "/camera/stream",
+  videoFlipH: false,
+  videoFlipV: false,
   maxSpeed: 100,
   sensitivity: 1,
   invertSteering: false,
