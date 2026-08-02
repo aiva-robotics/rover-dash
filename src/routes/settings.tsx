@@ -179,6 +179,18 @@ function SettingsPage() {
           </div>
         </Field>
 
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <Toggle
+            label="Vänd bild horisontellt"
+            checked={settings.videoFlipH}
+            onChange={(v) => update({ videoFlipH: v })}
+          />
+          <Toggle
+            label="Vänd bild vertikalt"
+            checked={settings.videoFlipV}
+            onChange={(v) => update({ videoFlipV: v })}
+          />
+        </div>
       </section>
 
       <section className="glass-panel space-y-5 p-4">
