@@ -64,6 +64,7 @@ state = CarState()
 outputs = RCOutputs()
 active_client = None  # type: ignore[var-annotated]
 active_session = ""
+driver_info = {"session": "", "label": "", "since": None, "handover": None}
 
 
 # --- Telemetriläsning -------------------------------------------------------
@@ -131,6 +132,7 @@ def telemetry() -> dict:
         "armed": outputs.armed,
         "failsafe": state.failsafe,
     }
+    payload["driver"] = dict(driver_info)
     if _cached_temp is not None:
         payload["temperature"] = _cached_temp
     if _cached_rssi is not None:
@@ -355,6 +357,13 @@ async def handler(websocket) -> None:
 
     active_client = websocket
     active_session = session
+    now_ms = int(time.time() * 1000)
+    previous = driver_info.get("session")
+    driver_info["session"] = session
+    driver_info["label"] = str(peer[0])
+    driver_info["since"] = now_ms
+    if previous and previous != session:
+        driver_info["handover"] = now_ms
     state.last_command = time.monotonic()
     state.failsafe = False
     log.info("Klient ansluten: %s", peer[0])
@@ -403,6 +412,9 @@ async def handler(websocket) -> None:
         if active_client is websocket:
             active_client = None
             active_session = ""
+            driver_info["session"] = ""
+            driver_info["label"] = ""
+            driver_info["since"] = None
             state.reset_controls()
             outputs.fail_safe()
             outputs.accessories_off()

@@ -18,6 +18,15 @@ export type CarStatus = {
   estop?: boolean;
   armed?: boolean;
   failsafe?: boolean;
+  /** Vem som styr just nu, enligt servern. */
+  driver?: {
+    session?: string | null;
+    label?: string | null;
+    /** Epoch ms när nuvarande förare tog kontrollen. */
+    since?: number | null;
+    /** Epoch ms för senaste övertagande mellan olika förare. */
+    handover?: number | null;
+  };
 };
 
 

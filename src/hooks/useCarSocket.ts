@@ -125,7 +125,7 @@ let logId = 0;
 
 /** Stabilt ID per flik – gör att egen återanslutning inte ser ut som övertagning. */
 let cachedSessionId: string | null = null;
-function sessionId(): string {
+export function sessionId(): string {
   if (cachedSessionId) return cachedSessionId;
   let id = "";
   try {
