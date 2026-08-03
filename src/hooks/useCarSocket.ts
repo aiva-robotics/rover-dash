@@ -123,6 +123,24 @@ const initialHealth: SocketHealth = {
 
 let logId = 0;
 
+/** Stabilt ID per flik – gör att egen återanslutning inte ser ut som övertagning. */
+let cachedSessionId: string | null = null;
+function sessionId(): string {
+  if (cachedSessionId) return cachedSessionId;
+  let id = "";
+  try {
+    id = window.sessionStorage.getItem("rc-session-id") ?? "";
+    if (!id) {
+      id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      window.sessionStorage.setItem("rc-session-id", id);
+    }
+  } catch {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+  cachedSessionId = id;
+  return id;
+}
+
 function toBase64Url(value: string): string {
   const bytes = new TextEncoder().encode(value);
   let binary = "";
