@@ -407,11 +407,16 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
         }
       };
       sock.onerror = () => log("error", "WebSocket-fel");
-      sock.onclose = () => {
+      sock.onclose = (event) => {
         socketRef.current = null;
         setConnection("disconnected");
         pingRef.current = null;
         if (closed) return;
+        // 4005 = servern ersatte en gammal anslutning från samma flik – tyst omstart.
+        if (event.code === 4005) {
+          timersRef.current.push(setTimeout(connect, 200));
+          return;
+        }
         retryRef.current += 1;
         const delay = Math.min(BASE_RETRY_DELAY * 2 ** (retryRef.current - 1), MAX_RETRY_DELAY);
         patchHealth({
