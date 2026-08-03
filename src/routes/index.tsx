@@ -190,6 +190,8 @@ function ControlStation() {
           steering={steering}
           recording={status.recording ?? false}
           mode={hudMode}
+          flipH={settings.videoFlipH}
+          flipV={settings.videoFlipV}
         />
       </VideoFeed>
 
