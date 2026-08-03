@@ -160,10 +160,14 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
   // Återanslut med exponentiell backoff.
   useEffect(() => {
     if (!failed || !active) return;
-    const delay = BACKOFF[Math.min(attempt, BACKOFF.length - 1)] ?? 30000;
-    const id = window.setTimeout(retry, delay);
+    const delay = BACKOFF[Math.min(failStreak.current, BACKOFF.length - 1)] ?? 30000;
+    const id = window.setTimeout(() => {
+      failStreak.current += 1;
+      retry();
+    }, delay);
     return () => window.clearTimeout(id);
   }, [failed, active, attempt, retry]);
+
 
   // Frigör dekodern när strömmen inte ska visas (sparar minne/batteri).
   useEffect(() => {
