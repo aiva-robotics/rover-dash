@@ -10,7 +10,8 @@ import { ConnectionLostOverlay } from "@/components/car/ConnectionLostOverlay";
 import { LogPanel } from "@/components/car/LogPanel";
 import { ConnectionHealthPanel } from "@/components/car/ConnectionHealthPanel";
 import { FuturePanels } from "@/components/car/FuturePanels";
-import { useCarSocket } from "@/hooks/useCarSocket";
+import { DriverPanel } from "@/components/car/DriverPanel";
+import { useCarSocket, sessionId } from "@/hooks/useCarSocket";
 import { useSettings } from "@/hooks/useSettings";
 import { clamp } from "@/lib/car-protocol";
 
@@ -192,6 +193,12 @@ function ControlStation() {
         />
       </VideoFeed>
 
+
+      <DriverPanel
+        status={status}
+        connection={connection}
+        sessionId={hydrated ? sessionId() : ""}
+      />
 
       <TelemetryPanel
         status={status}
