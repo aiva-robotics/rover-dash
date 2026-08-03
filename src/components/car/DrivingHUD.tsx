@@ -58,12 +58,28 @@ function Bar({ value, label }: { value: number; label: string }) {
   );
 }
 
-export function DrivingHUD({ status, throttle, steering, recording, mode = "live" }: Props) {
+export function DrivingHUD({
+  status,
+  throttle,
+  steering,
+  recording,
+  mode = "live",
+  flipH = false,
+  flipV = false,
+}: Props) {
   const battery =
     status.batteryPercent ?? (status.battery ? voltageToPercent(status.battery) : undefined);
   const wifi = status.rssi !== undefined ? rssiToPercent(status.rssi) : undefined;
   const heading = status.heading ?? 0;
   const modeStyle = MODE_STYLES[mode];
+  // Spegla HUD:en så att den matchar den vända videobilden
+  const mirrored = flipH !== flipV;
+  const headingDeg = mirrored ? -heading : heading;
+  const steeringValue = flipH ? -steering : steering;
+  const throttleValue = flipV ? -throttle : throttle;
+  const rowClass = flipH ? "flex-row-reverse" : "flex-row";
+  const colClass = flipV ? "flex-col-reverse" : "flex-col";
+
 
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3 text-foreground">
