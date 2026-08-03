@@ -138,10 +138,21 @@ def telemetry() -> dict:
 
 
 # --- Kommandohantering ------------------------------------------------------
+def _coerce_percent(value, default: float, label: str) -> float:
+    if isinstance(value, bool):
+        log.warning("Ignorerar ogiltigt %s-värde: bool", label)
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        log.warning("Ignorerar ogiltigt %s-värde: %r", label, value)
+        return default
+
+
 def apply_command(throttle: float, steering: float) -> None:
     limit = clamp(config.MAX_THROTTLE, 0.0, 100.0)
-    state.throttle = clamp(float(throttle), -limit, limit)
-    state.steering = clamp(float(steering), -100.0, 100.0)
+    state.throttle = clamp(_coerce_percent(throttle, 0.0, "throttle"), -limit, limit)
+    state.steering = clamp(_coerce_percent(steering, 0.0, "steering"), -100.0, 100.0)
     state.last_command = time.monotonic()
     state.failsafe = False
     if state.estop:
@@ -331,6 +342,13 @@ async def handler(websocket) -> None:
 
     try:
         async for raw in websocket:
+            if isinstance(raw, bytes):
+                raw_size = len(raw)
+            else:
+                raw_size = len(raw.encode("utf-8", errors="replace"))
+            if raw_size > config.MAX_MESSAGE_BYTES:
+                log.warning("För stort klientmeddelande från %s: %d bytes", peer[0], raw_size)
+                continue
             try:
                 data = json.loads(raw)
             except (json.JSONDecodeError, TypeError):
@@ -387,6 +405,7 @@ async def main() -> None:
         config.PORT,
         ping_interval=20,
         ping_timeout=20,
+        max_size=config.MAX_MESSAGE_BYTES,
         select_subprotocol=select_subprotocol,
     ):
         log.info("WebSocket-server lyssnar på ws://%s:%s", config.HOST, config.PORT)

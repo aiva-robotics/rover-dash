@@ -63,21 +63,22 @@ function ControlStation() {
 
   const [throttleRaw, setThrottleRaw] = useState(0);
   const [steeringRaw, setSteeringRaw] = useState(0);
-  const [headlights, setHeadlights] = useState(false);
   const [estop, setEstop] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
 
   const online = connection === "connected";
-  const locked = !online || estop;
+  const driveLocked = !online || estop;
+  const accessoryLocked = !online || estop;
+  const headlights = status.headlights ?? false;
 
-  const throttle = locked
+  const throttle = driveLocked
     ? 0
     : Math.round(
         clamp(throttleRaw * settings.sensitivity, -100, 100) *
           (settings.maxSpeed / 100) *
           (settings.invertThrottle ? -1 : 1),
       );
-  const steering = locked
+  const steering = driveLocked
     ? 0
     : Math.round(
         clamp(steeringRaw * settings.sensitivity, -100, 100) * (settings.invertSteering ? -1 : 1),
@@ -204,30 +205,27 @@ function ControlStation() {
         <Joystick
           label="Gas / broms"
           axis="y"
-          disabled={locked}
+          disabled={driveLocked}
           onChange={setThrottleRaw}
           accent="primary"
         />
         <Joystick
           label="Styrning"
           axis="x"
-          disabled={locked}
+          disabled={driveLocked}
           onChange={setSteeringRaw}
           accent="accent"
         />
       </div>
 
       <ControlButtons
-        disabled={locked}
+        accessoryDisabled={accessoryLocked}
         headlights={headlights}
         stopped={estop}
         pending={estopPending}
 
         onToggleLights={() => {
-          setHeadlights((v) => {
-            sendAction("headlights", !v);
-            return !v;
-          });
+          sendAction("headlights", !headlights);
         }}
         onHorn={horn}
         onPhoto={() => sendAction("photo")}

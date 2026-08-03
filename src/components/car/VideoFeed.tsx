@@ -19,6 +19,7 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
   const [fullscreen, setFullscreen] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [healthOk, setHealthOk] = useState<boolean | null>(null);
   // Sant när enheten inte kan låsa orienteringen – då roterar vi bilden själva.
   const [rotate, setRotate] = useState(false);
 
@@ -26,7 +27,47 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
   useEffect(() => {
     setFailed(false);
     setAttempt(0);
+    setHealthOk(null);
   }, [src]);
+
+  useEffect(() => {
+    if (!online || !src) {
+      setHealthOk(null);
+      return;
+    }
+    let cancelled = false;
+    const healthUrl = new URL(src, window.location.href);
+    healthUrl.pathname = healthUrl.pathname.endsWith("/stream")
+      ? healthUrl.pathname.replace(/\/stream$/, "/health")
+      : "/health";
+    healthUrl.search = "";
+    const check = async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 2500);
+        const res = await fetch(healthUrl, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        window.clearTimeout(timeout);
+        if (!cancelled) {
+          setHealthOk(res.ok);
+          if (!res.ok) setFailed(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setHealthOk(false);
+          setFailed(true);
+        }
+      }
+    };
+    void check();
+    const id = window.setInterval(check, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [online, src]);
 
   // MJPEG-strömmar dör tyst när kameraservern startas om. Ladda om strömmen
   // automatiskt var 4:e sekund tills en bild kommer igenom igen.
@@ -149,6 +190,10 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
                     : undefined,
           }}
           onError={() => setFailed(true)}
+          onLoad={() => {
+            setFailed(false);
+            setHealthOk(true);
+          }}
         />
       ) : (
         <div className="scanlines absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,color-mix(in_oklab,var(--color-primary)_12%,transparent),transparent_70%)]">
@@ -159,7 +204,8 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
             </p>
             {online && src ? (
               <p className="mt-1 text-[0.65rem] tracking-[0.15em] text-muted-foreground/70">
-                Försöker återansluta till kameran…{attempt > 0 ? ` (försök ${attempt})` : ""}
+                {healthOk === false ? "Kameraservern svarar inte" : "Försöker återansluta till kameran…"}
+                {attempt > 0 ? ` (försök ${attempt})` : ""}
               </p>
             ) : null}
           </div>

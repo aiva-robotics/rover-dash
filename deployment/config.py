@@ -70,6 +70,7 @@ PHOTO_DIR = os.environ.get("RC_PHOTO_DIR", "/var/lib/rc-car/photos")
 # Om inget kommando tagits emot inom denna tid -> neutral (failsafe)
 WATCHDOG_TIMEOUT = _float("RC_WATCHDOG_TIMEOUT", 0.5)
 WATCHDOG_INTERVAL = _float("RC_WATCHDOG_INTERVAL", 0.1)
+MAX_MESSAGE_BYTES = _int("RC_MAX_MESSAGE_BYTES", 4096)
 
 # Serversidig hastighetsgräns (procent). Klientens maxSpeed går aldrig att
 # kringgå eftersom servern klipper här också.

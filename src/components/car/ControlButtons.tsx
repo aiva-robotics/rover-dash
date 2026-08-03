@@ -2,7 +2,7 @@ import { Camera, Lightbulb, OctagonAlert, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  disabled?: boolean | undefined;
+  accessoryDisabled?: boolean | undefined;
   headlights: boolean;
   onToggleLights: () => void;
   onHorn: () => void;
@@ -43,7 +43,7 @@ function ActionButton({
 }
 
 export function ControlButtons({
-  disabled,
+  accessoryDisabled,
   headlights,
   onToggleLights,
   onHorn,
@@ -58,19 +58,19 @@ export function ControlButtons({
         icon={<Lightbulb className="h-5 w-5" />}
         label="Strålkastare"
         active={headlights}
-        disabled={disabled}
+        disabled={accessoryDisabled}
         onClick={onToggleLights}
       />
       <ActionButton
         icon={<Volume2 className="h-5 w-5" />}
         label="Tuta"
-        disabled={disabled}
+        disabled={accessoryDisabled}
         onClick={onHorn}
       />
       <ActionButton
         icon={<Camera className="h-5 w-5" />}
         label="Ta bild"
-        disabled={disabled}
+        disabled={accessoryDisabled}
         onClick={onPhoto}
       />
       <button
