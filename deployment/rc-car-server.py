@@ -415,7 +415,6 @@ async def handler(websocket) -> None:
             driver_info["session"] = ""
             driver_info["label"] = ""
             driver_info["since"] = None
-driver_info = {"session": "", "label": "", "since": None, "handover": None}
             state.reset_controls()
             outputs.fail_safe()
             outputs.accessories_off()
