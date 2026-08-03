@@ -10,6 +10,8 @@ type Props = {
   steering: number;
   recording?: boolean | undefined;
   mode?: HudMode | undefined;
+  flipH?: boolean | undefined;
+  flipV?: boolean | undefined;
 };
 
 const MODE_STYLES: Record<HudMode, { label: string; className: string; pulse: boolean }> = {
