@@ -63,6 +63,7 @@ class CarState:
 state = CarState()
 outputs = RCOutputs()
 active_client = None  # type: ignore[var-annotated]
+active_session = ""
 
 
 # --- Telemetriläsning -------------------------------------------------------
@@ -286,6 +287,14 @@ def _supplied_token(websocket) -> str:
     return legacy
 
 
+def _supplied_session(websocket) -> str:
+    """Klientens sessions-ID (samma flik/enhet) ur handskakningen."""
+    for proto in _offered_protocols(websocket):
+        if proto.startswith("rc-session."):
+            return _b64url_decode(proto[len("rc-session.") :]) or proto[len("rc-session.") :]
+    return ""
+
+
 def select_subprotocol(_connection, subprotocols) -> str | None:
     for proto in subprotocols or []:
         if proto == "rc-control":
@@ -300,7 +309,7 @@ def _authorized(websocket) -> bool:
 
 
 async def handler(websocket) -> None:
-    global active_client
+    global active_client, active_session
     peer = getattr(websocket, "remote_address", ("?", 0))
 
     if not _authorized(websocket):
@@ -313,14 +322,27 @@ async def handler(websocket) -> None:
             await websocket.close(code=4003, reason="unauthorized")
         return
 
+    session = _supplied_session(websocket)
+
     if config.SINGLE_CLIENT and active_client is not None and active_client is not websocket:
-        if config.TAKEOVER:
-            log.warning("Ny klient %s tar över styrningen", peer[0])
+        # Samma flik/enhet som återansluter (t.ex. efter WiFi-glapp) är ingen
+        # övertagning – stäng den gamla, halvöppna anslutningen tyst.
+        same_session = bool(session) and session == active_session
+        if same_session or config.TAKEOVER:
             old = active_client
             active_client = None
+            if same_session:
+                log.info("Klient %s återansluter (samma session) – ersätter gammal anslutning", peer[0])
+            else:
+                log.warning("Ny klient %s tar över styrningen", peer[0])
             try:
-                await old.send(json.dumps({"error": "taken_over", "message": "En annan klient tog över styrningen"}))
-                await old.close(code=4001, reason="taken over")
+                if not same_session:
+                    await old.send(
+                        json.dumps({"error": "taken_over", "message": "En annan klient tog över styrningen"})
+                    )
+                    await old.close(code=4001, reason="taken over")
+                else:
+                    await old.close(code=4005, reason="replaced")
             except Exception:
                 pass
         else:
@@ -332,6 +354,7 @@ async def handler(websocket) -> None:
             return
 
     active_client = websocket
+    active_session = session
     state.last_command = time.monotonic()
     state.failsafe = False
     log.info("Klient ansluten: %s", peer[0])
@@ -379,6 +402,7 @@ async def handler(websocket) -> None:
     finally:
         if active_client is websocket:
             active_client = None
+            active_session = ""
             state.reset_controls()
             outputs.fail_safe()
             outputs.accessories_off()
