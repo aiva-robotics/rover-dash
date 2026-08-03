@@ -145,15 +145,14 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
     };
   }, [active, src]);
 
-  // Stall-vakt: MJPEG-strömmar dör tyst utan att <img> ger onError.
+  // Vakt för anslutningar som hänger sig utan att ge vare sig bild eller fel.
+  // (Löpande stall upptäcks via frames-räknaren i /health ovan.)
   useEffect(() => {
-    if (!active || failed) return;
-    const id = window.setInterval(() => {
-      if (!lastFrameAt.current) return;
-      if (Date.now() - lastFrameAt.current > STALL_MS) setFailed(true);
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [active, failed]);
+    if (!active || failed || streaming) return;
+    const id = window.setTimeout(() => setFailed(true), STALL_MS);
+    return () => window.clearTimeout(id);
+  }, [active, failed, streaming, attempt]);
+
 
   // Återanslut med exponentiell backoff.
   useEffect(() => {
