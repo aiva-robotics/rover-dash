@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Camera, Maximize2, Minimize2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Camera, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -14,71 +14,169 @@ type OrientationLockable = ScreenOrientation & {
   lock?: (orientation: "landscape") => Promise<void>;
 };
 
+/** Backoff-schema (ms) för återanslutning till MJPEG-strömmen. */
+const BACKOFF = [1000, 2000, 4000, 8000, 15000, 30000];
+/** Utan nya bildrutor så här länge betraktas strömmen som död. */
+const STALL_MS = 6000;
+const HEALTH_INTERVAL = 5000;
+const HEALTH_TIMEOUT = 2500;
+
+function healthUrlFrom(src: string): string | null {
+  try {
+    const url = new URL(src, window.location.href);
+    url.pathname = url.pathname.endsWith("/stream")
+      ? url.pathname.replace(/\/stream$/, "/health")
+      : "/health";
+    url.search = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
+  const [streaming, setStreaming] = useState(false);
+  const [netOnline, setNetOnline] = useState(true);
+  const [visible, setVisible] = useState(true);
   // Sant när enheten inte kan låsa orienteringen – då roterar vi bilden själva.
   const [rotate, setRotate] = useState(false);
 
-  // Ny videoadress → försök igen även om den förra strömmen misslyckades.
-  useEffect(() => {
-    setFailed(false);
-    setAttempt(0);
-    setHealthOk(null);
-  }, [src]);
+  const lastFrameAt = useRef(0);
+  const lastFrameCount = useRef<number | null>(null);
+  const failStreak = useRef(0);
+  const active = online && !!src && netOnline && visible;
 
+  const retry = useCallback(() => {
+    lastFrameAt.current = 0;
+    lastFrameCount.current = null;
+    setStreaming(false);
+    setFailed(false);
+    setAttempt((n) => n + 1);
+  }, []);
+
+  const hardReset = useCallback(() => {
+    lastFrameAt.current = 0;
+    lastFrameCount.current = null;
+    failStreak.current = 0;
+    setStreaming(false);
+    setFailed(false);
+    setHealthOk(null);
+    setAttempt(0);
+  }, []);
+
+
+  // Ny videoadress → börja om från början.
   useEffect(() => {
-    if (!online || !src) {
+    hardReset();
+  }, [src, hardReset]);
+
+  // Nätverk tillbaka / flik synlig igen → starta om strömmen direkt.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => {
+      const on = navigator.onLine !== false;
+      setNetOnline(on);
+      if (on) retry();
+    };
+    const onVisibility = () => {
+      const vis = document.visibilityState === "visible";
+      setVisible(vis);
+      if (vis) retry();
+    };
+    setNetOnline(navigator.onLine !== false);
+    setVisible(document.visibilityState === "visible");
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [retry]);
+
+  // Hälsokoll mot kameraserverns /health. Räknaren "frames" avslöjar även
+  // strömmar som ser levande ut men inte längre producerar bildrutor.
+  useEffect(() => {
+    if (!active) {
       setHealthOk(null);
       return;
     }
+    const url = healthUrlFrom(src);
+    if (!url) {
+      setHealthOk(false);
+      return;
+    }
     let cancelled = false;
-    const healthUrl = new URL(src, window.location.href);
-    healthUrl.pathname = healthUrl.pathname.endsWith("/stream")
-      ? healthUrl.pathname.replace(/\/stream$/, "/health")
-      : "/health";
-    healthUrl.search = "";
     const check = async () => {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), HEALTH_TIMEOUT);
       try {
-        const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), 2500);
-        const res = await fetch(healthUrl, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        window.clearTimeout(timeout);
-        if (!cancelled) {
-          setHealthOk(res.ok);
-          if (!res.ok) setFailed(true);
+        const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+        if (cancelled) return;
+        setHealthOk(res.ok);
+        if (!res.ok) {
+          setFailed(true);
+          return;
         }
+        const data = (await res.json().catch(() => null)) as { frames?: number } | null;
+        if (cancelled || typeof data?.frames !== "number") return;
+        const prev = lastFrameCount.current;
+        lastFrameCount.current = data.frames;
+        // Servern lever men encodern har fastnat – tvinga omladdning.
+        if (prev !== null && data.frames === prev) setFailed(true);
       } catch {
         if (!cancelled) {
           setHealthOk(false);
           setFailed(true);
         }
+      } finally {
+        window.clearTimeout(timeout);
       }
     };
     void check();
-    const id = window.setInterval(check, 5000);
+    const id = window.setInterval(check, HEALTH_INTERVAL);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [online, src]);
+  }, [active, src]);
 
-  // MJPEG-strömmar dör tyst när kameraservern startas om. Ladda om strömmen
-  // automatiskt var 4:e sekund tills en bild kommer igenom igen.
+  // Vakt för anslutningar som hänger sig utan att ge vare sig bild eller fel.
+  // (Löpande stall upptäcks via frames-räknaren i /health ovan.)
   useEffect(() => {
-    if (!failed || !online || !src) return;
-    const id = setTimeout(() => {
-      setFailed(false);
-      setAttempt((n) => n + 1);
-    }, 4000);
-    return () => clearTimeout(id);
-  }, [failed, online, src, attempt]);
+    if (!active || failed || streaming) return;
+    const id = window.setTimeout(() => setFailed(true), STALL_MS);
+    return () => window.clearTimeout(id);
+  }, [active, failed, streaming, attempt]);
+
+
+  // Återanslut med exponentiell backoff.
+  useEffect(() => {
+    if (!failed || !active) return;
+    const delay = BACKOFF[Math.min(failStreak.current, BACKOFF.length - 1)] ?? 30000;
+    const id = window.setTimeout(() => {
+      failStreak.current += 1;
+      retry();
+    }, delay);
+    return () => window.clearTimeout(id);
+  }, [failed, active, attempt, retry]);
+
+
+  // Frigör dekodern när strömmen inte ska visas (sparar minne/batteri).
+  useEffect(() => {
+    if (active) return;
+    const img = imgRef.current;
+    if (img) img.removeAttribute("src");
+    setStreaming(false);
+  }, [active]);
+
   const isNativeFs = typeof document !== "undefined" && !!document.fullscreenElement;
 
   const isMobile = () =>
@@ -147,6 +245,20 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
   };
 
   const overlay = fullscreen && !isNativeFs;
+  const showImage = active && !failed;
+  const streamSrc = attempt > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src;
+
+  const statusText = !online
+    ? "Bilen är frånkopplad"
+    : !src
+      ? "Ingen videoadress angiven"
+      : !netOnline
+        ? "Enheten saknar nätverk"
+        : !visible
+          ? "Strömmen pausad (fliken i bakgrunden)"
+          : healthOk === false
+            ? "Kameraservern svarar inte"
+            : "Försöker återansluta till kameran…";
 
   return (
     <div
@@ -172,13 +284,14 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
           : undefined
       }
     >
-
-      {online && src && !failed ? (
+      {showImage ? (
         <img
+          ref={imgRef}
           key={attempt}
-          src={attempt > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src}
+          src={streamSrc}
           alt="Livevideo från bilens kamera"
           className="h-full w-full object-cover"
+          decoding="async"
           style={{
             transform:
               flipH && flipV
@@ -189,11 +302,17 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
                     ? "scaleY(-1)"
                     : undefined,
           }}
-          onError={() => setFailed(true)}
+          onError={() => {
+            setStreaming(false);
+            setFailed(true);
+          }}
           onLoad={() => {
-            setFailed(false);
+            lastFrameAt.current = Date.now();
+            failStreak.current = 0;
+            setStreaming(true);
             setHealthOk(true);
           }}
+
         />
       ) : (
         <div className="scanlines absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,color-mix(in_oklab,var(--color-primary)_12%,transparent),transparent_70%)]">
@@ -202,17 +321,31 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
             <p className="mt-2 text-xs uppercase tracking-[0.25em] text-muted-foreground">
               Ingen videosignal
             </p>
+            <p className="mt-1 text-[0.65rem] tracking-[0.15em] text-muted-foreground/70">
+              {statusText}
+              {attempt > 0 ? ` (försök ${attempt})` : ""}
+            </p>
             {online && src ? (
-              <p className="mt-1 text-[0.65rem] tracking-[0.15em] text-muted-foreground/70">
-                {healthOk === false ? "Kameraservern svarar inte" : "Försöker återansluta till kameran…"}
-                {attempt > 0 ? ` (försök ${attempt})` : ""}
-              </p>
+              <button
+                type="button"
+                onClick={retry}
+                className="mx-auto mt-3 flex items-center gap-2 rounded-lg bg-background/60 px-3 py-1.5 text-[0.7rem] uppercase tracking-[0.15em] text-foreground backdrop-blur-md transition-colors hover:bg-background/90"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Försök igen
+              </button>
             ) : null}
           </div>
         </div>
       )}
 
       {children}
+
+      {showImage && !streaming ? (
+        <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-background/60 px-2 py-1 text-[0.6rem] uppercase tracking-[0.2em] text-muted-foreground backdrop-blur-md">
+          Ansluter…
+        </div>
+      ) : null}
 
       <button
         type="button"
