@@ -323,8 +323,9 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
       openedRef.current = false;
       serverErrorRef.current = null;
       try {
-        const protocols = token ? ["rc-control", `rc-token.${toBase64Url(token)}`] : undefined;
-        sock = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
+        const protocols = ["rc-control", `rc-session.${toBase64Url(sessionId())}`];
+        if (token) protocols.push(`rc-token.${toBase64Url(token)}`);
+        sock = new WebSocket(url, protocols);
       } catch {
         log("error", "Ogiltig WebSocket-adress");
         raiseError("invalid_url", url, retryRef.current);
