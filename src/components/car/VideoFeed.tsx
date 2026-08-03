@@ -49,6 +49,7 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
 
   const lastFrameAt = useRef(0);
   const lastFrameCount = useRef<number | null>(null);
+  const failStreak = useRef(0);
   const active = online && !!src && netOnline && visible;
 
   const retry = useCallback(() => {
@@ -62,11 +63,13 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
   const hardReset = useCallback(() => {
     lastFrameAt.current = 0;
     lastFrameCount.current = null;
+    failStreak.current = 0;
     setStreaming(false);
     setFailed(false);
     setHealthOk(null);
     setAttempt(0);
   }, []);
+
 
   // Ny videoadress → börja om från början.
   useEffect(() => {
