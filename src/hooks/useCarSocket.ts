@@ -123,6 +123,24 @@ const initialHealth: SocketHealth = {
 
 let logId = 0;
 
+/** Stabilt ID per flik – gör att egen återanslutning inte ser ut som övertagning. */
+let cachedSessionId: string | null = null;
+function sessionId(): string {
+  if (cachedSessionId) return cachedSessionId;
+  let id = "";
+  try {
+    id = window.sessionStorage.getItem("rc-session-id") ?? "";
+    if (!id) {
+      id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      window.sessionStorage.setItem("rc-session-id", id);
+    }
+  } catch {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+  cachedSessionId = id;
+  return id;
+}
+
 function toBase64Url(value: string): string {
   const bytes = new TextEncoder().encode(value);
   let binary = "";
@@ -323,8 +341,9 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
       openedRef.current = false;
       serverErrorRef.current = null;
       try {
-        const protocols = token ? ["rc-control", `rc-token.${toBase64Url(token)}`] : undefined;
-        sock = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
+        const protocols = ["rc-control", `rc-session.${toBase64Url(sessionId())}`];
+        if (token) protocols.push(`rc-token.${toBase64Url(token)}`);
+        sock = new WebSocket(url, protocols);
       } catch {
         log("error", "Ogiltig WebSocket-adress");
         raiseError("invalid_url", url, retryRef.current);
@@ -388,11 +407,16 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
         }
       };
       sock.onerror = () => log("error", "WebSocket-fel");
-      sock.onclose = () => {
+      sock.onclose = (event) => {
         socketRef.current = null;
         setConnection("disconnected");
         pingRef.current = null;
         if (closed) return;
+        // 4005 = servern ersatte en gammal anslutning från samma flik – tyst omstart.
+        if (event.code === 4005) {
+          timersRef.current.push(setTimeout(connect, 200));
+          return;
+        }
         retryRef.current += 1;
         const delay = Math.min(BASE_RETRY_DELAY * 2 ** (retryRef.current - 1), MAX_RETRY_DELAY);
         patchHealth({
