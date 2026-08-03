@@ -301,10 +301,11 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
           }}
           onLoad={() => {
             lastFrameAt.current = Date.now();
+            failStreak.current = 0;
             setStreaming(true);
             setHealthOk(true);
-            if (attempt !== 0) setAttempt(0);
           }}
+
         />
       ) : (
         <div className="scanlines absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,color-mix(in_oklab,var(--color-primary)_12%,transparent),transparent_70%)]">
