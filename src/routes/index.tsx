@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
-import { VideoFeed } from "@/components/car/VideoFeed";
+import { VideoFeed, type VideoFeedHandle } from "@/components/car/VideoFeed";
 import { DrivingHUD, type HudMode } from "@/components/car/DrivingHUD";
 import { Joystick } from "@/components/car/Joystick";
 import { ControlButtons } from "@/components/car/ControlButtons";
@@ -63,6 +63,8 @@ function ControlStation() {
   const [steeringRaw, setSteeringRaw] = useState(0);
   const [estop, setEstop] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
+  const videoRef = useRef<VideoFeedHandle | null>(null);
+
 
   const online = connection === "connected";
   const driveLocked = !online || estop;
@@ -177,8 +179,34 @@ function ControlStation() {
     };
   }, []);
 
+  /** Tar en stillbild: sparas på bilen och laddas ner till enheten. */
+  const handlePhoto = useCallback(async () => {
+    sendAction("photo");
+    try {
+      const blob = await videoRef.current?.captureFrame();
+      if (!blob) {
+        log("error", "Ingen videoström att fånga – bilden kunde inte laddas ner");
+        return;
+      }
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const name = `rc-bild-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.jpg`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      log("info", `Bild sparad: ${name}`);
+    } catch (err) {
+      log("error", `Kunde inte spara bilden: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [log, sendAction]);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
+
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-3 p-3 pb-8">
@@ -199,7 +227,9 @@ function ControlStation() {
       </div>
 
       <VideoFeed
+        ref={videoRef}
         src={settings.videoUrl}
+
         online={online || settings.demoMode}
         flipH={settings.videoFlipH}
         flipV={settings.videoFlipV}
@@ -263,7 +293,7 @@ function ControlStation() {
           sendAction("headlights", !headlights);
         }}
         onHorn={horn}
-        onPhoto={() => sendAction("photo")}
+        onPhoto={() => void handlePhoto()}
         onEmergencyStop={() => {
           if (estop) {
             setEstop(false);

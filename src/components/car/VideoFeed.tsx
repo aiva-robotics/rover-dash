@@ -1,6 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Camera, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export type VideoFeedHandle = {
+  /** Fångar aktuell bildruta som JPEG. Returnerar null om ingen ström finns. */
+  captureFrame: () => Promise<Blob | null>;
+};
 
 type Props = {
   src: string;
@@ -10,6 +23,7 @@ type Props = {
   children?: ReactNode | undefined;
   /** Reglage som bara visas i helskärmsläge (gas/broms + styrning). */
   overlayControls?: ReactNode | undefined;
+  ref?: Ref<VideoFeedHandle> | undefined;
 };
 
 type OrientationLockable = ScreenOrientation & {
@@ -23,12 +37,12 @@ const STALL_MS = 6000;
 const HEALTH_INTERVAL = 5000;
 const HEALTH_TIMEOUT = 2500;
 
-function healthUrlFrom(src: string): string | null {
+function siblingUrlFrom(src: string, endpoint: string): string | null {
   try {
     const url = new URL(src, window.location.href);
     url.pathname = url.pathname.endsWith("/stream")
-      ? url.pathname.replace(/\/stream$/, "/health")
-      : "/health";
+      ? url.pathname.replace(/\/stream$/, `/${endpoint}`)
+      : `/${endpoint}`;
     url.search = "";
     return url.toString();
   } catch {
@@ -36,7 +50,12 @@ function healthUrlFrom(src: string): string | null {
   }
 }
 
-export function VideoFeed({ src, online, flipH, flipV, children, overlayControls }: Props) {
+function healthUrlFrom(src: string): string | null {
+  return siblingUrlFrom(src, "health");
+}
+
+export function VideoFeed({ src, online, flipH, flipV, children, overlayControls, ref }: Props) {
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -55,6 +74,57 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
   const lastFrameCount = useRef<number | null>(null);
   const failStreak = useRef(0);
   const active = online && !!src && netOnline && visible;
+  const [flash, setFlash] = useState(false);
+
+  /** Ritar aktuell bildruta till en canvas och returnerar den som JPEG-blob. */
+  const captureFrame = useCallback(async (): Promise<Blob | null> => {
+    const img = imgRef.current;
+    const w = img?.naturalWidth ?? 0;
+    const h = img?.naturalHeight ?? 0;
+
+    if (img && w > 0 && h > 0) {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          // Spegla på samma sätt som videon visas så att filen matchar bilden.
+          ctx.translate(flipH ? w : 0, flipV ? h : 0);
+          ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+          ctx.drawImage(img, 0, 0, w, h);
+          const blob = await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92);
+          });
+          if (blob) {
+            setFlash(true);
+            window.setTimeout(() => setFlash(false), 150);
+            return blob;
+          }
+        }
+      } catch (err) {
+        // Vanligast: canvas är "tainted" (CORS) – vi faller tillbaka på /snapshot.
+        console.debug("Canvas-fångst misslyckades, provar /snapshot", err);
+      }
+    }
+
+    // Fallback: hämta en färsk stillbild direkt från kameraservern.
+    const snapshotUrl = src ? siblingUrlFrom(src, "snapshot") : null;
+    if (!snapshotUrl) return null;
+    try {
+      const resp = await fetch(`${snapshotUrl}?t=${Date.now()}`, { cache: "no-store" });
+      if (!resp.ok) return null;
+      const blob = await resp.blob();
+      setFlash(true);
+      window.setTimeout(() => setFlash(false), 150);
+      return blob;
+    } catch (err) {
+      console.debug("Kunde inte hämta stillbild", err);
+      return null;
+    }
+  }, [flipH, flipV, src]);
+
+  useImperativeHandle(ref, () => ({ captureFrame }), [captureFrame]);
 
   const retry = useCallback(() => {
     lastFrameAt.current = 0;
@@ -63,6 +133,7 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
     setFailed(false);
     setAttempt((n) => n + 1);
   }, []);
+
 
   const hardReset = useCallback(() => {
     lastFrameAt.current = 0;
@@ -321,6 +392,10 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
           alt="Livevideo från bilens kamera"
           className="h-full w-full object-cover"
           decoding="async"
+          // Krävs för att kunna rita bildrutan till canvas när kameraservern
+          // ligger på en annan origin (den skickar Access-Control-Allow-Origin: *).
+          crossOrigin="anonymous"
+
           style={{
             transform:
               flipH && flipV
@@ -369,6 +444,16 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
       )}
 
       {children}
+
+      {/* Kort "blixt" som kvitterar att en bild fångats. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-0 z-50 bg-white transition-opacity duration-150",
+          flash ? "opacity-80" : "opacity-0",
+        )}
+      />
+
 
       {showImage && !streaming ? (
         <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-background/60 px-2 py-1 text-[0.6rem] uppercase tracking-[0.2em] text-muted-foreground backdrop-blur-md">
