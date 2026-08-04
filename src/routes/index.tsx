@@ -233,15 +233,18 @@ function ControlStation() {
         }}
       />
 
-      <ConnectionHealthPanel
-        health={health}
+      <DetailsDrawer
+        status={status}
         connection={connection}
         ping={ping}
+        health={health}
+        logs={logs}
+        error={lastError}
+        sessionId={hydrated ? sessionId() : ""}
         onReconnect={reconnectNow}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
       />
-
-      <FuturePanels />
-      <LogPanel logs={logs} />
 
       <ConnectionLostOverlay
         visible={hydrated && (connection === "disconnected" || estop)}
