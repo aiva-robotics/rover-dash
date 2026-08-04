@@ -392,6 +392,10 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
           alt="Livevideo från bilens kamera"
           className="h-full w-full object-cover"
           decoding="async"
+          // Krävs för att kunna rita bildrutan till canvas när kameraservern
+          // ligger på en annan origin (den skickar Access-Control-Allow-Origin: *).
+          crossOrigin="anonymous"
+
           style={{
             transform:
               flipH && flipV
