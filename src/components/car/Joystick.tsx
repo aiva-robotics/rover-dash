@@ -7,6 +7,8 @@ type Props = {
   disabled?: boolean | undefined;
   onChange: (value: number) => void; // -100..100
   accent?: "primary" | "accent";
+  /** Kompakt variant utan panelram – används som overlay i helskärm. */
+  compact?: boolean | undefined;
 };
 
 /** Dödzon i procent – hindrar drift kring mitten. */
@@ -20,7 +22,7 @@ function applyDeadzone(raw: number) {
   return Math.round(sign * ((Math.abs(raw) - DEADZONE) / (100 - DEADZONE)) * 100);
 }
 
-export function Joystick({ label, axis, disabled, onChange, accent = "primary" }: Props) {
+export function Joystick({ label, axis, disabled, onChange, accent = "primary", compact }: Props) {
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [value, setValue] = useState(0);
   const [active, setActive] = useState(false);
@@ -91,8 +93,20 @@ export function Joystick({ label, axis, disabled, onChange, accent = "primary" }
   const accentVar = accent === "primary" ? "var(--color-primary)" : "var(--color-accent)";
 
   return (
-    <div className="glass-panel flex select-none flex-col items-center gap-3 p-4">
-      <div className="flex w-full items-center justify-between text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+    <div
+      className={cn(
+        "flex select-none flex-col items-center gap-3",
+        compact ? "gap-1.5" : "glass-panel p-4",
+      )}
+    >
+      <div
+        className={cn(
+          "flex w-full items-center justify-between text-[0.65rem] uppercase tracking-[0.2em]",
+          compact
+            ? "text-foreground/80 [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]"
+            : "text-muted-foreground",
+        )}
+      >
         <span className="truncate">{label}</span>
         <span className="font-mono tabular-nums text-foreground">{value}</span>
       </div>
@@ -106,7 +120,8 @@ export function Joystick({ label, axis, disabled, onChange, accent = "primary" }
         onBlur={() => emit(0)}
         tabIndex={disabled ? -1 : 0}
         className={cn(
-          "relative aspect-square w-full max-w-[190px] touch-none rounded-full border border-border/60 bg-background/40 shadow-inner backdrop-blur-md transition-opacity outline-none focus-visible:border-primary",
+          "relative aspect-square w-full touch-none rounded-full border border-border/60 bg-background/40 shadow-inner backdrop-blur-md transition-opacity outline-none focus-visible:border-primary",
+          compact ? "max-w-[120px]" : "max-w-[190px]",
           disabled && "pointer-events-none opacity-40",
         )}
         role="slider"

@@ -8,6 +8,8 @@ type Props = {
   flipH?: boolean;
   flipV?: boolean;
   children?: ReactNode | undefined;
+  /** Reglage som bara visas i helskärmsläge (gas/broms + styrning). */
+  overlayControls?: ReactNode | undefined;
 };
 
 type OrientationLockable = ScreenOrientation & {
@@ -34,7 +36,7 @@ function healthUrlFrom(src: string): string | null {
   }
 }
 
-export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
+export function VideoFeed({ src, online, flipH, flipV, children, overlayControls }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -347,11 +349,27 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
         </div>
       ) : null}
 
+      {fullscreen && overlayControls ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-4"
+          style={{
+            paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
+            paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
+            paddingRight: "max(0.75rem, env(safe-area-inset-right))",
+          }}
+        >
+          {overlayControls}
+        </div>
+      ) : null}
+
       <button
         type="button"
         onClick={toggle}
         aria-label="Helskärm"
-        className="pointer-events-auto absolute bottom-3 right-3 grid h-9 w-9 place-items-center rounded-lg bg-background/50 text-foreground backdrop-blur-md transition-colors hover:bg-background/80"
+        className={cn(
+          "pointer-events-auto absolute right-3 grid h-9 w-9 place-items-center rounded-lg bg-background/50 text-foreground backdrop-blur-md transition-colors hover:bg-background/80",
+          fullscreen && overlayControls ? "top-3" : "bottom-3",
+        )}
       >
         {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       </button>
