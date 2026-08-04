@@ -1,6 +1,8 @@
 import { Battery, Circle, Wifi } from "lucide-react";
 import type { CarStatus } from "@/lib/car-protocol";
 import { rssiToPercent, voltageToPercent } from "@/lib/car-protocol";
+import { useI18n } from "@/hooks/useI18n";
+import type { TKey } from "@/lib/i18n";
 
 export type HudMode = "live" | "demo" | "estop" | "offline";
 
@@ -11,24 +13,27 @@ type Props = {
   flipH?: boolean | undefined;
 };
 
-const MODE_STYLES: Record<HudMode, { label: string; className: string; pulse: boolean }> = {
+export const MODE_KEYS: Record<HudMode, TKey> = {
+  live: "hud.mode.live",
+  demo: "hud.mode.demo",
+  estop: "hud.mode.estop",
+  offline: "hud.mode.offline",
+};
+
+const MODE_STYLES: Record<HudMode, { className: string; pulse: boolean }> = {
   live: {
-    label: "Live",
     className: "border-primary/70 bg-primary/20 text-primary",
     pulse: false,
   },
   demo: {
-    label: "Demoläge",
     className: "border-accent/70 bg-accent/20 text-accent",
     pulse: false,
   },
   estop: {
-    label: "Nödstopp",
     className: "border-destructive bg-destructive/30 text-destructive",
     pulse: true,
   },
   offline: {
-    label: "Frånkopplad",
     className: "border-destructive/70 bg-destructive/20 text-destructive",
     pulse: true,
   },
@@ -42,6 +47,7 @@ export function DrivingHUD({
   mode = "live",
   flipH = false,
 }: Props) {
+  const { t } = useI18n();
   const battery =
     status.batteryPercent ?? (status.battery ? voltageToPercent(status.battery) : undefined);
   const wifi = status.rssi !== undefined ? rssiToPercent(status.rssi) : undefined;
@@ -69,7 +75,7 @@ export function DrivingHUD({
             : `absolute left-1/2 top-2 -translate-x-1/2 rounded-full border px-2.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-[0.3em] backdrop-blur-sm ${modeStyle.className}`
         }
       >
-        {modeStyle.label}
+        {t(MODE_KEYS[mode])}
       </div>
 
       <div className={`relative flex ${rowClass} items-start justify-between gap-2`}>
@@ -85,7 +91,7 @@ export function DrivingHUD({
         </div>
         {recording && (
           <span className="flex items-center gap-1.5 rounded-full bg-destructive/70 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-widest backdrop-blur-sm">
-            <Circle className="h-2 w-2 animate-pulse fill-current" /> Rec
+            <Circle className="h-2 w-2 animate-pulse fill-current" /> {t("hud.rec")}
           </span>
         )}
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Activity, PlugZap, RefreshCw } from "lucide-react";
 import type { SocketHealth } from "@/hooks/useCarSocket";
 import type { ConnectionState } from "@/lib/car-protocol";
+import { useI18n } from "@/hooks/useI18n";
 
 type Props = {
   health: SocketHealth;
@@ -39,27 +40,28 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 export function ConnectionHealthPanel({ health, connection, ping, onReconnect }: Props) {
+  const { t } = useI18n();
   const now = useNow(true);
   const retryIn =
     health.nextRetryAt !== null ? Math.max(0, Math.ceil((health.nextRetryAt - now) / 1000)) : null;
   const uptime = health.connectedSince !== null ? now - health.connectedSince : null;
   const quality =
     connection !== "connected"
-      ? "Ingen länk"
+      ? t("health.quality.none")
       : ping === null
-        ? "Mäter…"
+        ? t("health.quality.measuring")
         : ping < 60
-          ? "Utmärkt"
+          ? t("health.quality.excellent")
           : ping < 140
-            ? "Bra"
-            : "Svag";
+            ? t("health.quality.good")
+            : t("health.quality.weak");
 
   return (
     <section className="glass-panel space-y-3 p-4">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <h2 className="flex min-w-0 items-center gap-2 text-[0.65rem] uppercase tracking-[0.25em] text-muted-foreground">
           <Activity className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Anslutningshälsa</span>
+          <span className="truncate">{t("health.title")}</span>
         </h2>
         <button
           type="button"
@@ -67,7 +69,7 @@ export function ConnectionHealthPanel({ health, connection, ping, onReconnect }:
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border/60 bg-background/40 px-2.5 py-1.5 text-[0.6rem] uppercase tracking-[0.15em] transition-colors hover:border-primary hover:text-primary"
         >
           <RefreshCw className="h-3 w-3" />
-          Återanslut
+          <span className="truncate">{t("health.reconnect")}</span>
         </button>
       </div>
 
@@ -76,28 +78,28 @@ export function ConnectionHealthPanel({ health, connection, ping, onReconnect }:
           <PlugZap className="h-4 w-4 shrink-0 text-destructive" />
           <span className="min-w-0">
             {connection === "connecting"
-              ? `Återansluter… (försök ${health.attempts + 1})`
+              ? t("health.reconnecting", { n: health.attempts + 1 })
               : retryIn !== null
-                ? `Nytt försök om ${retryIn} s (försök ${health.attempts + 1})`
-                : "Frånkopplad"}
+                ? t("health.retryIn", { s: retryIn, n: health.attempts + 1 })
+                : t("common.disconnected")}
           </span>
         </div>
       )}
 
       <div className="grid grid-cols-3 gap-2">
-        <Metric label="Kvalitet" value={quality} />
-        <Metric label="Ping" value={ping !== null ? `${ping} ms` : "—"} />
-        <Metric label="Jitter" value={health.jitter !== null ? `${health.jitter} ms` : "—"} />
-        <Metric label="Min" value={health.pingMin !== null ? `${health.pingMin} ms` : "—"} />
-        <Metric label="Medel" value={health.pingAvg !== null ? `${health.pingAvg} ms` : "—"} />
-        <Metric label="Max" value={health.pingMax !== null ? `${health.pingMax} ms` : "—"} />
-        <Metric label="Upptid" value={uptime !== null ? formatDuration(uptime) : "—"} />
-        <Metric label="Paketförlust" value={`${health.packetLoss}%`} />
-        <Metric label="Försök" value={String(health.attempts)} />
-        <Metric label="Anslutningar" value={String(health.totalConnects)} />
-        <Metric label="Avbrott" value={String(health.totalDisconnects)} />
+        <Metric label={t("health.quality")} value={quality} />
+        <Metric label={t("telemetry.ping")} value={ping !== null ? `${ping} ms` : "—"} />
+        <Metric label={t("health.jitter")} value={health.jitter !== null ? `${health.jitter} ms` : "—"} />
+        <Metric label={t("health.min")} value={health.pingMin !== null ? `${health.pingMin} ms` : "—"} />
+        <Metric label={t("health.avg")} value={health.pingAvg !== null ? `${health.pingAvg} ms` : "—"} />
+        <Metric label={t("health.max")} value={health.pingMax !== null ? `${health.pingMax} ms` : "—"} />
+        <Metric label={t("health.uptime")} value={uptime !== null ? formatDuration(uptime) : "—"} />
+        <Metric label={t("health.packetLoss")} value={`${health.packetLoss}%`} />
+        <Metric label={t("health.attempts")} value={String(health.attempts)} />
+        <Metric label={t("health.connects")} value={String(health.totalConnects)} />
+        <Metric label={t("health.disconnects")} value={String(health.totalDisconnects)} />
         <Metric
-          label="Meddelanden"
+          label={t("health.messages")}
           value={`${health.messagesReceived}/${health.commandsSent}`}
         />
       </div>

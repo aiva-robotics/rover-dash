@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { UserCheck, UserX, Users } from "lucide-react";
 import type { CarStatus, ConnectionState } from "@/lib/car-protocol";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
+import type { TFunc } from "@/lib/i18n";
 
 type Props = {
   status: CarStatus;
@@ -10,22 +12,23 @@ type Props = {
   sessionId: string;
 };
 
-function formatClock(ms?: number | null) {
+function formatClock(ms: number | null | undefined, locale: string) {
   if (!ms) return null;
-  return new Date(ms).toLocaleTimeString("sv-SE");
+  return new Date(ms).toLocaleTimeString(locale);
 }
 
-function formatAgo(ms?: number | null, now = Date.now()) {
+function formatAgo(ms: number | null | undefined, now: number, t: TFunc) {
   if (!ms) return null;
   const seconds = Math.max(0, Math.round((now - ms) / 1000));
-  if (seconds < 60) return `${seconds} s sedan`;
+  if (seconds < 60) return t("time.secondsAgo", { n: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min sedan`;
+  if (minutes < 60) return t("time.minutesAgo", { n: minutes });
   const hours = Math.floor(minutes / 60);
-  return `${hours} h ${minutes % 60} min sedan`;
+  return t("time.hoursAgo", { h: hours, m: minutes % 60 });
 }
 
 export function DriverPanel({ status, connection, sessionId }: Props) {
+  const { t, locale } = useI18n();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -38,19 +41,19 @@ export function DriverPanel({ status, connection, sessionId }: Props) {
   const isMe = Boolean(driver?.session && driver.session === sessionId);
 
   const title = !online
-    ? "Ingen kontakt med bilen"
+    ? t("driver.noContact")
     : !hasDriver
-      ? "Ingen aktiv förare"
+      ? t("driver.none")
       : isMe
-        ? "Du styr bilen"
-        : `Annan förare: ${driver?.label ?? "okänd"}`;
+        ? t("driver.me")
+        : t("driver.other", { name: driver?.label ?? t("driver.unknown") });
 
   const Icon = !online || !hasDriver ? UserX : isMe ? UserCheck : Users;
 
   return (
     <section className="glass-panel p-4">
       <h2 className="flex items-center gap-2 text-[0.65rem] uppercase tracking-[0.25em] text-muted-foreground">
-        <Users className="h-3.5 w-3.5" /> Förarkontroll
+        <Users className="h-3.5 w-3.5" /> {t("driver.title")}
       </h2>
 
       <div className="mt-3 flex items-start gap-3">
@@ -70,17 +73,25 @@ export function DriverPanel({ status, connection, sessionId }: Props) {
           <p className="truncate text-sm font-semibold">{title}</p>
           <p className="font-mono text-[0.7rem] text-muted-foreground">
             {hasDriver && online
-              ? `Aktiv sedan ${formatClock(driver?.since) ?? "—"} (${formatAgo(driver?.since, now) ?? "—"})`
-              : "Väntar på att någon ska ta kontrollen."}
+              ? t("driver.activeSince", {
+                  clock: formatClock(driver?.since, locale) ?? "—",
+                  ago: formatAgo(driver?.since, now, t) ?? "—",
+                })
+              : t("driver.waiting")}
           </p>
           <p className="font-mono text-[0.7rem] text-muted-foreground">
             {driver?.handover
-              ? `Senaste övertagande: ${formatClock(driver.handover)} (${formatAgo(driver.handover, now)})`
-              : "Inget övertagande registrerat."}
+              ? t("driver.handover", {
+                  clock: formatClock(driver.handover, locale) ?? "—",
+                  ago: formatAgo(driver.handover, now, t) ?? "—",
+                })
+              : t("driver.noHandover")}
           </p>
           <p className="font-mono text-[0.65rem] text-muted-foreground/70">
-            Din session: {sessionId.slice(0, 8)}
-            {driver?.session && !isMe ? ` · aktiv: ${driver.session.slice(0, 8)}` : ""}
+            {t("driver.session", { id: sessionId.slice(0, 8) })}
+            {driver?.session && !isMe
+              ? t("driver.activeSession", { id: driver.session.slice(0, 8) })
+              : ""}
           </p>
         </div>
       </div>
