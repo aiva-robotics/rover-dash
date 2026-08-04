@@ -326,44 +326,50 @@ async def handler(websocket) -> None:
 
     session = _supplied_session(websocket)
 
-    if config.SINGLE_CLIENT and active_client is not None and active_client is not websocket:
-        # Samma flik/enhet som återansluter (t.ex. efter WiFi-glapp) är ingen
-        # övertagning – stäng den gamla, halvöppna anslutningen tyst.
-        same_session = bool(session) and session == active_session
-        if same_session or config.TAKEOVER:
-            old = active_client
-            active_client = None
-            if same_session:
-                log.info("Klient %s återansluter (samma session) – ersätter gammal anslutning", peer[0])
-            else:
-                log.warning("Ny klient %s tar över styrningen", peer[0])
-            try:
-                if not same_session:
-                    await old.send(
-                        json.dumps({"error": "taken_over", "message": "En annan klient tog över styrningen"})
-                    )
-                    await old.close(code=4001, reason="taken over")
+    # Check-and-set av aktiv förare måste vara atomärt: annars kan två klienter
+    # som ansluter samtidigt båda passera kontrollen och styra bilen parallellt.
+    async with client_lock:
+        if config.SINGLE_CLIENT and active_client is not None and active_client is not websocket:
+            # Samma flik/enhet som återansluter (t.ex. efter WiFi-glapp) är ingen
+            # övertagning – stäng den gamla, halvöppna anslutningen tyst.
+            same_session = bool(session) and session == active_session
+            if same_session or config.TAKEOVER:
+                old = active_client
+                active_client = None
+                if same_session:
+                    log.info("Klient %s återansluter (samma session) – ersätter gammal anslutning", peer[0])
                 else:
-                    await old.close(code=4005, reason="replaced")
-            except Exception:
-                pass
-        else:
-            log.warning("Avvisar klient %s – redan upptagen", peer[0])
-            await websocket.send(
-                json.dumps({"error": "busy", "message": "En annan klient styr redan bilen"})
-            )
-            await websocket.close(code=4002, reason="busy")
-            return
+                    log.warning("Ny klient %s tar över styrningen", peer[0])
+                try:
+                    if not same_session:
+                        await old.send(
+                            json.dumps({"error": "taken_over", "message": "En annan klient tog över styrningen"})
+                        )
+                        await old.close(code=4001, reason="taken over")
+                    else:
+                        await old.close(code=4005, reason="replaced")
+                except ConnectionClosed:
+                    pass
+                except Exception:
+                    log.exception("Fel vid stängning av tidigare anslutning")
+            else:
+                log.warning("Avvisar klient %s – redan upptagen", peer[0])
+                await websocket.send(
+                    json.dumps({"error": "busy", "message": "En annan klient styr redan bilen"})
+                )
+                await websocket.close(code=4002, reason="busy")
+                return
 
-    active_client = websocket
-    active_session = session
-    now_ms = int(time.time() * 1000)
-    previous = driver_info.get("session")
-    driver_info["session"] = session
-    driver_info["label"] = str(peer[0])
-    driver_info["since"] = now_ms
-    if previous and previous != session:
-        driver_info["handover"] = now_ms
+        active_client = websocket
+        active_session = session
+        now_ms = int(time.time() * 1000)
+        previous = driver_info.get("session")
+        driver_info["session"] = session
+        driver_info["label"] = str(peer[0])
+        driver_info["since"] = now_ms
+        if previous and previous != session:
+            driver_info["handover"] = now_ms
+
     state.last_command = time.monotonic()
     state.failsafe = False
     log.info("Klient ansluten: %s", peer[0])
