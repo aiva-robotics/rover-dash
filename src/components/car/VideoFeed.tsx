@@ -36,7 +36,7 @@ function healthUrlFrom(src: string): string | null {
   }
 }
 
-export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
+export function VideoFeed({ src, online, flipH, flipV, children, overlayControls }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
