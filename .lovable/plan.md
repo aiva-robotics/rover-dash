@@ -31,3 +31,12 @@ Appens gränssnitt är idag hårdkodat på svenska. Planen inför ett litet öve
 
 - Ingen översättning av loggtext som kommer råa från Pi-servern (visas som de skickas).
 - Inga fler språk än engelska och svenska.
+
+## Textpassning och layoutkontroll
+
+Engelska och svenska har olika ordlängd, så varje textyta måste tåla båda.
+
+- Kompakta ytor (statusrad, badges, HUD-etiketter, knappar i videooverlay) får korta etiketter på båda språken, med `truncate`, `min-w-0` och `whitespace-nowrap` där texten ligger bredvid ikoner eller fasta element.
+- Där ett ord ändå riskerar att bli för långt används en kort variant på små skärmar och full text från `sm:` och uppåt, enligt samma mönster som redan finns i statusraden.
+- Knappar och paneler tillåts växa i höjd i stället för att klippa text; ingen text får överlappa eller sticka ut ur sin ram.
+- Verifiering sker med Playwright-skärmbilder på 393 px mobil (både porträtt och landskap i helskärm) samt desktop, för start- och inställningsvyn, en gång på engelska och en gång på svenska. Överflöd kontrolleras även programmatiskt genom att jämföra `scrollWidth` mot `clientWidth` på texthållarna.
