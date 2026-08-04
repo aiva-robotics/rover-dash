@@ -159,14 +159,18 @@ def _coerce_percent(value, default: float, label: str) -> float:
 
 def apply_command(throttle: float, steering: float) -> None:
     limit = clamp(config.MAX_THROTTLE, 0.0, 100.0)
-    state.throttle = clamp(_coerce_percent(throttle, 0.0, "throttle"), -limit, limit)
-    state.steering = clamp(_coerce_percent(steering, 0.0, "steering"), -100.0, 100.0)
     state.last_command = time.monotonic()
     state.failsafe = False
     if state.estop:
+        # Under nödstopp får inget kommando lagras eller nå utgångarna – annars
+        # rapporterar telemetrin gas som inte finns och ett resume kan rycka till.
+        state.reset_controls()
         outputs.neutral()
-    else:
-        outputs.apply(state.throttle, state.steering)
+        return
+    state.throttle = clamp(_coerce_percent(throttle, 0.0, "throttle"), -limit, limit)
+    state.steering = clamp(_coerce_percent(steering, 0.0, "steering"), -100.0, 100.0)
+    outputs.apply(state.throttle, state.steering)
+
 
 
 def take_photo() -> str | None:
