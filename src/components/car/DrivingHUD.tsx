@@ -47,28 +47,21 @@ export function DrivingHUD({
   const battery =
     status.batteryPercent ?? (status.battery ? voltageToPercent(status.battery) : undefined);
   const wifi = status.rssi !== undefined ? rssiToPercent(status.rssi) : undefined;
-  const heading = status.heading ?? 0;
   const modeStyle = MODE_STYLES[mode];
-  // Spegla HUD:en så att den matchar den vända videobilden
-  const mirrored = flipH !== flipV;
-  const headingDeg = mirrored ? -heading : heading;
   const rowClass = flipH ? "flex-row-reverse" : "flex-row";
-  const colClass = flipV ? "flex-col-reverse" : "flex-col";
   const alert = mode !== "live";
 
   return (
     <div
-      className={`pointer-events-none absolute inset-0 flex ${colClass} justify-between text-foreground`}
+      className="pointer-events-none absolute inset-0 flex text-foreground"
       style={{
         paddingTop: "max(0.5rem, env(safe-area-inset-top))",
-        paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
         paddingLeft: "max(0.5rem, env(safe-area-inset-left))",
         paddingRight: "max(0.5rem, env(safe-area-inset-right))",
       }}
     >
-      {/* Mjuka skuggor i topp/botten så att texten syns utan att dölja bildens mitt */}
+      {/* Mjuk skugga i toppen så att statusraden syns mot videon */}
       <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/45 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/45 to-transparent" />
 
       <div
         aria-live="polite"
@@ -92,33 +85,11 @@ export function DrivingHUD({
             {wifi !== undefined ? `${wifi}%` : "--"}
           </span>
         </div>
-        <div className={`flex ${rowClass} items-center gap-2`}>
-          {recording && (
-            <span className="flex items-center gap-1.5 rounded-full bg-destructive/70 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-widest backdrop-blur-sm">
-              <Circle className="h-2 w-2 animate-pulse fill-current" /> Rec
-            </span>
-          )}
-          <div className="relative grid h-9 w-9 place-items-center rounded-full bg-background/55 backdrop-blur-sm sm:h-11 sm:w-11">
-            <div
-              className="-mt-1 text-[0.55rem] font-bold text-primary transition-transform duration-300"
-              style={{ transform: `rotate(${headingDeg}deg)` }}
-            >
-              ▲
-            </div>
-            <span className="absolute bottom-0.5 font-mono text-[0.5rem] leading-none tabular-nums text-foreground/70">
-              {Math.round(heading)}°
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className={`relative flex ${rowClass} items-end justify-between gap-3`}>
-        <div className="rounded-lg bg-background/55 px-2 py-1 text-right backdrop-blur-sm">
-          <div className="font-mono text-lg font-bold leading-none tabular-nums text-primary sm:text-2xl">
-            {Math.round(status.speed ?? 0)}
-          </div>
-          <div className="text-[0.5rem] uppercase tracking-[0.2em] text-foreground/70">km/h</div>
-        </div>
+        {recording && (
+          <span className="flex items-center gap-1.5 rounded-full bg-destructive/70 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-widest backdrop-blur-sm">
+            <Circle className="h-2 w-2 animate-pulse fill-current" /> Rec
+          </span>
+        )}
       </div>
     </div>
   );
