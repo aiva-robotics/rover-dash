@@ -153,19 +153,17 @@ function ControlStation() {
     }
   }, [sendAction]);
 
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-3 p-3 pb-8">
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span
-            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-              online ? "bg-primary shadow-[0_0_12px_var(--color-primary)]" : "bg-destructive"
-            }`}
-          />
-          <h1 className="truncate text-base font-bold uppercase tracking-[0.2em]">
-            RC Control Station
-          </h1>
-        </div>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+        <StatusBar
+          status={status}
+          connection={connection}
+          ping={ping}
+          sessionId={hydrated ? sessionId() : ""}
+        />
         <Link
           to="/settings"
           aria-label="Inställningar"
@@ -173,7 +171,7 @@ function ControlStation() {
         >
           <SettingsIcon className="h-4 w-4" />
         </Link>
-      </header>
+      </div>
 
       <VideoFeed
         src={settings.videoUrl}
@@ -191,21 +189,6 @@ function ControlStation() {
           flipV={settings.videoFlipV}
         />
       </VideoFeed>
-
-
-      <DriverPanel
-        status={status}
-        connection={connection}
-        sessionId={hydrated ? sessionId() : ""}
-      />
-
-      <TelemetryPanel
-        status={status}
-        connection={connection}
-        ping={ping}
-        error={lastError}
-      />
-
 
       <div className="grid grid-cols-2 gap-2">
         <Joystick
