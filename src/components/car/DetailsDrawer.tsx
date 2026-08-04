@@ -29,6 +29,7 @@ export function DetailsDrawer({
   logs,
   error,
   sessionId,
+  onReconnect,
   open,
   onOpenChange,
 }: Props) {
