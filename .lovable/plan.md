@@ -8,7 +8,7 @@ Idag visas allt samtidigt på startsidan: video + HUD, förarpanel, telemetri (6
 - Videoströmmen med HUD (batteri, wifi, hastighet, gas/ratt, läge)
 - Joysticks
 - Kontrollknappar (ljus, tuta, foto, nödstopp)
-- En smal statusrad högst upp: anslutningsprick + ping + batteri + "Du styr"/"Annan styr" i komprimerad form
+- En smal statusrad högst upp: AIVA Robotics-logga till vänster, anslutningsprick + ping + batteri + "Du styr"/"Annan styr" i komprimerad form till höger
 
 **Dolt bakom en "Detaljer"-panel (utfällbar längst ner, stängd som standard):**
 - Full telemetri (spänning, dBm, temperatur, hastighet, ping)
@@ -23,7 +23,8 @@ Idag visas allt samtidigt på startsidan: video + HUD, förarpanel, telemetri (6
 ## Teknisk avgränsning
 
 - Endast presentation ändras. `useCarSocket`, protokoll, inställningar och serverkod rörs inte.
-- Ny komponent `src/components/car/StatusBar.tsx` (kompakt topprad).
+- Ny komponent `src/components/car/StatusBar.tsx` (kompakt topprad) som innehåller AIVA Robotics-loggan.
+- Loggan renderas som text/SVG ("AIVA Robotics") i subtil stil — ingen bildresurs krävs, men om användaren har en logotypfil kan den ersätta texten senare.
 - Ny komponent `src/components/car/DetailsDrawer.tsx` som samlar befintliga `TelemetryPanel`, `ConnectionHealthPanel`, `DriverPanel` och `LogPanel` i en shadcn `Accordion`/`Collapsible`, öppet läge sparas i localStorage via befintlig settings-hook-stil (eller lokal state om vi vill hålla settings orörd).
 - `FuturePanels` (GPS/AI-platshållare) tas bort helt från sidan och komponentfilen raderas.
 - `src/routes/index.tsx` byggs om till: header/statusrad → video+HUD → joysticks → knappar → detaljlåda.
