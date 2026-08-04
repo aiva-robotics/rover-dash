@@ -15,7 +15,6 @@ Idag visas allt samtidigt på startsidan: video + HUD, förarpanel, telemetri (6
 - Anslutningshälsa (jitter, min/medel/max, paketförlust, försök, meddelanden)
 - Förarpanel med sessions-ID och övertagningshistorik
 - Logg
-- Framtidspaneler (GPS/AI) — flyttas hit helt
 
 **Fortsatt påträngande när det behövs:**
 - Nödstopp och anslutningsbortfall visas som idag med tydligt överlägg — ingenting av säkerhetsvärde göms.
