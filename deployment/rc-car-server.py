@@ -39,9 +39,11 @@ log = logging.getLogger("rc-car")
 try:
     import websockets
     from websockets.server import serve
+    from websockets.exceptions import ConnectionClosed
 except ImportError:  # pragma: no cover
     log.error("websockets saknas. Installera: sudo apt-get install -y python3-websockets")
     sys.exit(1)
+
 
 
 class CarState:
