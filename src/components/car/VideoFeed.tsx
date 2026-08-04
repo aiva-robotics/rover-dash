@@ -48,6 +48,8 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
   const [visible, setVisible] = useState(true);
   // Sant när enheten inte kan låsa orienteringen – då roterar vi bilden själva.
   const [rotate, setRotate] = useState(false);
+  // Används för att visa en uppmaning om att vrida enheten.
+  const [portrait, setPortrait] = useState(false);
 
   const lastFrameAt = useRef(0);
   const lastFrameCount = useRef<number | null>(null);
@@ -184,8 +186,13 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
   const isMobile = () =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches;
 
+  const detectPortrait = () =>
+    typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+
   const lockLandscape = async () => {
     if (!isMobile()) return;
+    const inPortrait = detectPortrait();
+    setPortrait(inPortrait);
     const orientation = screen.orientation as OrientationLockable | undefined;
     try {
       if (orientation?.lock) {
@@ -196,7 +203,8 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
     } catch {
       // iOS Safari m.fl. tillåter inte orienteringslås.
     }
-    setRotate(window.innerHeight > window.innerWidth);
+    // Fallback: rotera innehållet själva om vi är i porträtt.
+    setRotate(inPortrait);
   };
 
   const unlockOrientation = () => {
@@ -206,6 +214,7 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
       // ignoreras
     }
     setRotate(false);
+    setPortrait(false);
   };
 
   // Håll state i synk om användaren lämnar helskärm med systemgesten.
@@ -219,6 +228,24 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+
+  // Uppdatera rotationsstatus om användaren vrider enheten under helskärm.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => {
+      const inPortrait = detectPortrait();
+      setPortrait(inPortrait);
+      if (fullscreen && isMobile()) {
+        setRotate(inPortrait);
+      }
+    };
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, [fullscreen]);
 
   const toggle = async () => {
     const el = wrapRef.current;
@@ -359,6 +386,17 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
           }}
         >
           {overlayControls}
+        </div>
+      ) : null}
+
+      {/* Tydlig uppmaning på mobil när vi tvingar landskap via CSS-rotation.
+          Texten motroteras så att den är läsbar även när containern är roterad. */}
+      {fullscreen && portrait && rotate ? (
+        <div
+          className="pointer-events-none absolute left-1/2 top-4 z-50 rounded-full bg-background/80 px-4 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md"
+          style={{ transform: "translateX(-50%) rotate(-90deg)" }}
+        >
+          Vrid enheten till landskap
         </div>
       ) : null}
 
