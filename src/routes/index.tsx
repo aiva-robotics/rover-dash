@@ -182,7 +182,14 @@ function ControlStation() {
     };
   }, []);
 
-  /** Tar en stillbild: sparas på bilen och laddas ner till enheten. */
+  const {
+    photos,
+    addPhoto,
+    removePhoto,
+    clearAll,
+  } = usePhotoGallery(hydrated);
+
+  /** Tar en stillbild: sparas på bilen, i galleriet och laddas ner till enheten. */
   const handlePhoto = useCallback(async () => {
     sendAction("photo");
     try {
@@ -191,24 +198,23 @@ function ControlStation() {
         log("error", "Ingen videoström att fånga – bilden kunde inte laddas ner");
         return;
       }
-      const now = new Date();
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const name = `rc-bild-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.jpg`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const takenAt = Date.now();
+      const name = photoFileName(takenAt);
+      try {
+        await addPhoto(blob, takenAt);
+      } catch (err) {
+        console.debug("Kunde inte spara bild i galleriet", err);
+      }
+      downloadBlob(blob, name);
       log("info", `Bild sparad: ${name}`);
     } catch (err) {
       log("error", `Kunde inte spara bilden: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [log, sendAction]);
+  }, [addPhoto, log, sendAction]);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+
 
 
   return (
