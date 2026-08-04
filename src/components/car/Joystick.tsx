@@ -22,7 +22,7 @@ function applyDeadzone(raw: number) {
   return Math.round(sign * ((Math.abs(raw) - DEADZONE) / (100 - DEADZONE)) * 100);
 }
 
-export function Joystick({ label, axis, disabled, onChange, accent = "primary" }: Props) {
+export function Joystick({ label, axis, disabled, onChange, accent = "primary", compact }: Props) {
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [value, setValue] = useState(0);
   const [active, setActive] = useState(false);
