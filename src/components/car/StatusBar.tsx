@@ -74,7 +74,7 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
 
         <span
           className={cn(
-            "min-w-0 truncate rounded-full border px-2 py-0.5 text-[0.6rem] uppercase tracking-wider",
+            "shrink-0 whitespace-nowrap rounded-full border px-2 py-0.5 text-[0.6rem] uppercase tracking-wider",
             isMe && online
               ? "border-primary/40 bg-primary/10 text-primary"
               : hasDriver && online
@@ -82,7 +82,8 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
                 : "border-destructive/40 bg-destructive/10 text-destructive",
           )}
         >
-          {driverText}
+          <span className="sm:hidden">{driverTextShort}</span>
+          <span className="hidden sm:inline">{driverText}</span>
         </span>
       </div>
     </div>
