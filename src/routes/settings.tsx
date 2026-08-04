@@ -1,21 +1,25 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, RotateCcw } from "lucide-react";
 import { localWsUrl, useSettings } from "@/hooks/useSettings";
+import { useI18n } from "@/hooks/useI18n";
+import { LANGUAGES } from "@/lib/i18n";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Inställningar — RC Control Station" },
+      { title: "Settings — RC Control Station" },
       {
         name: "description",
         content:
-          "Ställ in WebSocket-adress, videoadress, maxhastighet, joystickkänslighet och inverterade reglage.",
+          "Configure WebSocket address, video address, top speed, joystick sensitivity and inverted controls.",
       },
-      { property: "og:title", content: "Inställningar — RC Control Station" },
+      { property: "og:title", content: "Settings — RC Control Station" },
       {
         property: "og:description",
-        content: "Anpassa anslutning och körkänsla för din radiostyrda bil.",
+        content: "Tune connection and driving feel for your RC car.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: SettingsPage,
@@ -79,30 +83,53 @@ function Toggle({
 
 function SettingsPage() {
   const { settings, update, reset } = useSettings();
+  const { t } = useI18n();
 
   return (
     <main className="mx-auto w-full max-w-2xl space-y-4 p-3 pb-10">
       <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
         <Link
           to="/"
-          aria-label="Tillbaka"
+          aria-label={t("common.back")}
           className="glass-panel grid h-10 w-10 place-items-center transition-colors hover:text-primary"
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <h1 className="truncate text-base font-bold uppercase tracking-[0.2em]">Inställningar</h1>
+        <h1 className="truncate text-base font-bold uppercase tracking-[0.2em]">{t("settings.title")}</h1>
         <button
           type="button"
           onClick={reset}
-          aria-label="Återställ"
+          aria-label={t("settings.reset")}
           className="glass-panel grid h-10 w-10 place-items-center transition-colors hover:text-destructive"
         >
           <RotateCcw className="h-4 w-4" />
         </button>
       </header>
 
+      <section className="glass-panel space-y-3 p-4">
+        <Field label={t("settings.language")}>
+          <div className="grid grid-cols-2 gap-2">
+            {LANGUAGES.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => update({ language: option.value })}
+                aria-pressed={settings.language === option.value}
+                className={`min-w-0 truncate rounded-xl border px-3 py-2.5 text-sm transition-colors ${
+                  settings.language === option.value
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-background/50 hover:border-primary/50"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+      </section>
+
       <section className="glass-panel space-y-4 p-4">
-        <Field label="WebSocket-adress" hint="Adressen till bilens styrserver (rc-car-server på Pi:n, port 81).">
+        <Field label={t("settings.wsUrl")} hint={t("settings.wsUrl.hint")}>
           <input
             className={inputClass}
             value={settings.wsUrl}
@@ -115,7 +142,7 @@ function SettingsPage() {
               onClick={() => update({ wsUrl: localWsUrl() })}
               className="glass-panel px-3 py-1.5 text-xs transition-colors hover:text-primary"
             >
-              Pi WebSocket (samma värd)
+              {t("settings.wsUrl.same")}
             </button>
             <button
               type="button"
@@ -128,8 +155,8 @@ function SettingsPage() {
         </Field>
 
         <Field
-          label="Åtkomsttoken"
-          hint="Måste matcha RC_TOKEN på Pi:n. Lämna tomt om servern körs utan autentisering."
+          label={t("settings.token")}
+          hint={t("settings.token.hint")}
         >
           <input
             className={inputClass}
@@ -137,15 +164,15 @@ function SettingsPage() {
             autoComplete="off"
             value={settings.wsToken}
             onChange={(e) => update({ wsToken: e.target.value })}
-            placeholder="valfri hemlighet"
+            placeholder={t("settings.token.placeholder")}
           />
         </Field>
 
 
 
         <Field
-          label="Videoadress"
-          hint="MJPEG-ström från Raspberry Pi-kameran."
+          label={t("settings.videoUrl")}
+          hint={t("settings.videoUrl.hint")}
         >
           <input
             className={inputClass}
@@ -163,7 +190,7 @@ function SettingsPage() {
               }
               className="glass-panel px-3 py-1.5 text-xs transition-colors hover:text-primary"
             >
-              Pi-kamera (via nginx)
+              {t("settings.videoUrl.nginx")}
             </button>
             <button
               type="button"
@@ -174,19 +201,19 @@ function SettingsPage() {
               }
               className="glass-panel px-3 py-1.5 text-xs transition-colors hover:text-primary"
             >
-              Pi-kamera (port 8080)
+              {t("settings.videoUrl.port")}
             </button>
           </div>
         </Field>
 
         <div className="grid grid-cols-2 gap-2 pt-1">
           <Toggle
-            label="Vänd bild horisontellt"
+            label={t("settings.flipH")}
             checked={settings.videoFlipH}
             onChange={(v) => update({ videoFlipH: v })}
           />
           <Toggle
-            label="Vänd bild vertikalt"
+            label={t("settings.flipV")}
             checked={settings.videoFlipV}
             onChange={(v) => update({ videoFlipV: v })}
           />
@@ -194,7 +221,7 @@ function SettingsPage() {
       </section>
 
       <section className="glass-panel space-y-5 p-4">
-        <Field label={`Maxhastighet — ${settings.maxSpeed}%`}>
+        <Field label={t("settings.maxSpeed", { v: settings.maxSpeed })}>
           <input
             type="range"
             min={10}
@@ -205,7 +232,7 @@ function SettingsPage() {
             className="w-full accent-[var(--color-primary)]"
           />
         </Field>
-        <Field label={`Joystickkänslighet — ${settings.sensitivity.toFixed(2)}x`}>
+        <Field label={t("settings.sensitivity", { v: settings.sensitivity.toFixed(2) })}>
           <input
             type="range"
             min={0.5}
@@ -220,24 +247,24 @@ function SettingsPage() {
 
       <div className="space-y-2">
         <Toggle
-          label="Invertera styrning"
+          label={t("settings.invertSteering")}
           checked={settings.invertSteering}
           onChange={(v) => update({ invertSteering: v })}
         />
         <Toggle
-          label="Invertera gas"
+          label={t("settings.invertThrottle")}
           checked={settings.invertThrottle}
           onChange={(v) => update({ invertThrottle: v })}
         />
         <Toggle
-          label="Demoläge (simulerad bil)"
+          label={t("settings.demoMode")}
           checked={settings.demoMode}
           onChange={(v) => update({ demoMode: v })}
         />
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        Alla inställningar sparas automatiskt i webbläsaren.
+        {t("settings.autosave")}
       </p>
     </main>
   );
