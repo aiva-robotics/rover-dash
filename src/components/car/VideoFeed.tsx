@@ -8,6 +8,8 @@ type Props = {
   flipH?: boolean;
   flipV?: boolean;
   children?: ReactNode | undefined;
+  /** Reglage som bara visas i helskärmsläge (gas/broms + styrning). */
+  overlayControls?: ReactNode | undefined;
 };
 
 type OrientationLockable = ScreenOrientation & {
