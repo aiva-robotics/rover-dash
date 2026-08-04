@@ -178,6 +178,30 @@ function ControlStation() {
         online={online || settings.demoMode}
         flipH={settings.videoFlipH}
         flipV={settings.videoFlipV}
+        overlayControls={
+          <>
+            <div className="pointer-events-auto w-[34%] max-w-[150px]">
+              <Joystick
+                label="Gas / broms"
+                axis="y"
+                compact
+                disabled={driveLocked}
+                onChange={setThrottleRaw}
+                accent="primary"
+              />
+            </div>
+            <div className="pointer-events-auto w-[34%] max-w-[150px]">
+              <Joystick
+                label="Styrning"
+                axis="x"
+                compact
+                disabled={driveLocked}
+                onChange={setSteeringRaw}
+                accent="accent"
+              />
+            </div>
+          </>
+        }
       >
         <DrivingHUD
           status={status}
