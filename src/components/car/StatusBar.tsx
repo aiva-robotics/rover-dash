@@ -30,6 +30,15 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
         ? "Du styr"
         : "Annan styr";
 
+  // Kortare etikett på små skärmar så att texten aldrig kapas.
+  const driverTextShort = !online
+    ? "Offline"
+    : !hasDriver
+      ? "Ingen"
+      : isMe
+        ? "Du"
+        : "Annan";
+
   return (
     <div className="glass-panel grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 overflow-hidden px-3 py-2.5">
       <img
