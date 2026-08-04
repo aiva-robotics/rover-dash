@@ -67,6 +67,9 @@ outputs = RCOutputs()
 active_client = None  # type: ignore[var-annotated]
 active_session = ""
 driver_info = {"session": "", "label": "", "since": None, "handover": None}
+# Skyddar check-and-set av aktiv förare mot samtidiga anslutningar.
+client_lock = asyncio.Lock()
+
 
 
 # --- Telemetriläsning -------------------------------------------------------
