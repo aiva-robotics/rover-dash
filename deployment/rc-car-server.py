@@ -246,9 +246,22 @@ async def telemetry_loop() -> None:
         if client is None:
             continue
         try:
-            await client.send(json.dumps(telemetry()))
-        except Exception as exc:
-            log.debug("Kunde inte skicka telemetri: %s", exc.__class__.__name__)
+            # Backpressure: en långsam klient får inte bromsa hela loopen.
+            # Hinner den inte ta emot inom ett intervall stänger vi anslutningen.
+            await asyncio.wait_for(client.send(json.dumps(telemetry())), timeout=max(0.5, interval * 2))
+        except ConnectionClosed:
+            log.debug("Telemetri: klienten är frånkopplad")
+        except asyncio.TimeoutError:
+            log.warning("Telemetri: klienten hinner inte ta emot – stänger anslutningen")
+            try:
+                await client.close(code=1013, reason="slow consumer")
+            except Exception:
+                log.debug("Kunde inte stänga långsam klient", exc_info=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Oväntat fel i telemetriloopen")
+
 
 
 def _request_path(websocket) -> str:
