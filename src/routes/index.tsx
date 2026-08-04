@@ -63,6 +63,8 @@ function ControlStation() {
   const [steeringRaw, setSteeringRaw] = useState(0);
   const [estop, setEstop] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
+  const videoRef = useRef<VideoFeedHandle | null>(null);
+
 
   const online = connection === "connected";
   const driveLocked = !online || estop;
