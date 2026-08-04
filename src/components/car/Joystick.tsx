@@ -7,6 +7,8 @@ type Props = {
   disabled?: boolean | undefined;
   onChange: (value: number) => void; // -100..100
   accent?: "primary" | "accent";
+  /** Kompakt variant utan panelram – används som overlay i helskärm. */
+  compact?: boolean | undefined;
 };
 
 /** Dödzon i procent – hindrar drift kring mitten. */
