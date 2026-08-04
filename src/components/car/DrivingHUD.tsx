@@ -6,8 +6,6 @@ export type HudMode = "live" | "demo" | "estop" | "offline";
 
 type Props = {
   status: CarStatus;
-  throttle: number;
-  steering: number;
   recording?: boolean | undefined;
   mode?: HudMode | undefined;
   flipH?: boolean | undefined;
@@ -38,30 +36,9 @@ const MODE_STYLES: Record<HudMode, { label: string; className: string; pulse: bo
 };
 
 
-function Bar({ value, label }: { value: number; label: string }) {
-  const positive = value >= 0;
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-8 text-[0.55rem] uppercase tracking-widest text-foreground/70">
-        {label}
-      </span>
-      <div className="relative h-1 w-16 overflow-hidden rounded-full bg-foreground/20 sm:w-24">
-        <div
-          className="absolute top-0 h-full rounded-full bg-primary transition-[width,left] duration-100"
-          style={{
-            left: positive ? "50%" : `${50 - Math.abs(value) / 2}%`,
-            width: `${Math.abs(value) / 2}%`,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
 
 export function DrivingHUD({
   status,
-  throttle,
-  steering,
   recording,
   mode = "live",
   flipH = false,
@@ -75,8 +52,6 @@ export function DrivingHUD({
   // Spegla HUD:en så att den matchar den vända videobilden
   const mirrored = flipH !== flipV;
   const headingDeg = mirrored ? -heading : heading;
-  const steeringValue = flipH ? -steering : steering;
-  const throttleValue = flipV ? -throttle : throttle;
   const rowClass = flipH ? "flex-row-reverse" : "flex-row";
   const colClass = flipV ? "flex-col-reverse" : "flex-col";
   const alert = mode !== "live";
@@ -138,10 +113,6 @@ export function DrivingHUD({
       </div>
 
       <div className={`relative flex ${rowClass} items-end justify-between gap-3`}>
-        <div className="space-y-1 rounded-lg bg-background/55 px-2 py-1.5 backdrop-blur-sm">
-          <Bar label="Gas" value={throttleValue} />
-          <Bar label="Ratt" value={steeringValue} />
-        </div>
         <div className="rounded-lg bg-background/55 px-2 py-1 text-right backdrop-blur-sm">
           <div className="font-mono text-lg font-bold leading-none tabular-nums text-primary sm:text-2xl">
             {Math.round(status.speed ?? 0)}

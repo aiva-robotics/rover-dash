@@ -205,8 +205,6 @@ function ControlStation() {
       >
         <DrivingHUD
           status={status}
-          throttle={throttle}
-          steering={steering}
           recording={status.recording ?? false}
           mode={hudMode}
           flipH={settings.videoFlipH}
