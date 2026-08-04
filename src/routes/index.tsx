@@ -179,8 +179,34 @@ function ControlStation() {
     };
   }, []);
 
+  /** Tar en stillbild: sparas på bilen och laddas ner till enheten. */
+  const handlePhoto = useCallback(async () => {
+    sendAction("photo");
+    try {
+      const blob = await videoRef.current?.captureFrame();
+      if (!blob) {
+        log("error", "Ingen videoström att fånga – bilden kunde inte laddas ner");
+        return;
+      }
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const name = `rc-bild-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.jpg`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      log("info", `Bild sparad: ${name}`);
+    } catch (err) {
+      log("error", `Kunde inte spara bilden: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [log, sendAction]);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
+
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-3 p-3 pb-8">
