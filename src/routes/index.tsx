@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
-import { VideoFeed } from "@/components/car/VideoFeed";
+import { VideoFeed, type VideoFeedHandle } from "@/components/car/VideoFeed";
 import { DrivingHUD, type HudMode } from "@/components/car/DrivingHUD";
 import { Joystick } from "@/components/car/Joystick";
 import { ControlButtons } from "@/components/car/ControlButtons";
