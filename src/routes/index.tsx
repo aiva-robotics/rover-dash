@@ -293,7 +293,7 @@ function ControlStation() {
           sendAction("headlights", !headlights);
         }}
         onHorn={horn}
-        onPhoto={() => sendAction("photo")}
+        onPhoto={() => void handlePhoto()}
         onEmergencyStop={() => {
           if (estop) {
             setEstop(false);
