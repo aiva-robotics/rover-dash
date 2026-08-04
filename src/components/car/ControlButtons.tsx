@@ -1,5 +1,6 @@
 import { Camera, Lightbulb, OctagonAlert, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 
 type Props = {
   accessoryDisabled?: boolean | undefined;
@@ -52,24 +53,25 @@ export function ControlButtons({
   stopped,
   pending,
 }: Props) {
+  const { t } = useI18n();
   return (
     <div className="grid grid-cols-3 gap-2">
       <ActionButton
         icon={<Lightbulb className="h-5 w-5" />}
-        label="Strålkastare"
+        label={t("controls.headlights")}
         active={headlights}
         disabled={accessoryDisabled}
         onClick={onToggleLights}
       />
       <ActionButton
         icon={<Volume2 className="h-5 w-5" />}
-        label="Tuta"
+        label={t("controls.horn")}
         disabled={accessoryDisabled}
         onClick={onHorn}
       />
       <ActionButton
         icon={<Camera className="h-5 w-5" />}
-        label="Ta bild"
+        label={t("controls.photo")}
         disabled={accessoryDisabled}
         onClick={onPhoto}
       />
@@ -85,7 +87,13 @@ export function ControlButtons({
         )}
       >
         <OctagonAlert className="h-6 w-6" />
-        {pending ? "Väntar på bilens kvittens…" : stopped ? "Återställ nödstopp" : "Nödstopp"}
+        <span className="min-w-0 truncate">
+          {pending
+            ? t("controls.estop.pending")
+            : stopped
+              ? t("controls.estop.reset")
+              : t("controls.estop.stop")}
+        </span>
       </button>
     </div>
   );

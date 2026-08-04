@@ -1,6 +1,7 @@
 import { Activity, BatteryCharging, Gauge, Signal, Thermometer, Wifi } from "lucide-react";
 import type { CarStatus, ConnectionState } from "@/lib/car-protocol";
 import type { SocketError } from "@/hooks/useCarSocket";
+import { useI18n } from "@/hooks/useI18n";
 
 type Props = {
   status: CarStatus;
@@ -9,10 +10,10 @@ type Props = {
   error?: SocketError | null;
 };
 
-const labels: Record<ConnectionState, string> = {
-  connected: "Ansluten",
-  connecting: "Ansluter…",
-  disconnected: "Frånkopplad",
+const stateKeys: Record<ConnectionState, "common.connected" | "common.connecting" | "common.disconnected"> = {
+  connected: "common.connected",
+  connecting: "common.connecting",
+  disconnected: "common.disconnected",
 };
 
 
@@ -47,6 +48,7 @@ function Stat({
 }
 
 export function TelemetryPanel({ status, connection, ping, error }: Props) {
+  const { t } = useI18n();
   return (
     <div className="space-y-2">
       {error && connection !== "connected" && (
@@ -64,33 +66,33 @@ export function TelemetryPanel({ status, connection, ping, error }: Props) {
 
       <Stat
         icon={<BatteryCharging className="h-4 w-4" />}
-        label="Batteri"
+        label={t("telemetry.battery")}
         value={status.battery !== undefined ? `${status.battery.toFixed(2)} V` : "—"}
       />
       <Stat
         icon={<Wifi className="h-4 w-4" />}
-        label="WiFi"
+        label={t("telemetry.wifi")}
         value={status.rssi !== undefined ? `${status.rssi} dBm` : "—"}
       />
       <Stat
         icon={<Signal className="h-4 w-4" />}
-        label="Status"
-        value={labels[connection]}
+        label={t("telemetry.status")}
+        value={t(stateKeys[connection])}
         tone={connection === "connected" ? "good" : "bad"}
       />
       <Stat
         icon={<Gauge className="h-4 w-4" />}
-        label="Hastighet"
+        label={t("telemetry.speed")}
         value={`${(status.speed ?? 0).toFixed(1)} km/h`}
       />
       <Stat
         icon={<Thermometer className="h-4 w-4" />}
-        label="Temperatur"
+        label={t("telemetry.temperature")}
         value={status.temperature !== undefined ? `${status.temperature.toFixed(1)} °C` : "—"}
       />
       <Stat
         icon={<Activity className="h-4 w-4" />}
-        label="Ping"
+        label={t("telemetry.ping")}
         value={ping !== null ? `${ping} ms` : "—"}
       />
       </div>
