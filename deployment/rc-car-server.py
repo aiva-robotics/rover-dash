@@ -421,14 +421,19 @@ async def handler(websocket) -> None:
             if "ping" in data:
                 try:
                     await websocket.send(json.dumps({"pong": data["ping"]}))
-                except Exception:
+                except ConnectionClosed:
                     break
 
             action = data.get("action")
             if isinstance(action, str):
                 await handle_action_async(action, data.get("value"), websocket)
-    except Exception as exc:  # websockets.ConnectionClosed m.m.
-        log.info("Klientfel/frånkoppling: %s", exc.__class__.__name__)
+    except ConnectionClosed as exc:
+        log.info("Klient frånkopplad (%s): kod=%s", exc.__class__.__name__, getattr(exc, "code", "?"))
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("Oväntat serverfel i klienthanteraren för %s", peer[0])
+
     finally:
         if active_client is websocket:
             active_client = None
