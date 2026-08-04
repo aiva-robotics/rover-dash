@@ -2,6 +2,8 @@ import { Battery, Wifi } from "lucide-react";
 import type { CarStatus, ConnectionState } from "@/lib/car-protocol";
 import { voltageToPercent } from "@/lib/car-protocol";
 import { cn } from "@/lib/utils";
+import aivaLogo from "@/assets/aiva-robotics-logo.png.asset.json";
+
 
 type Props = {
   status: CarStatus;
