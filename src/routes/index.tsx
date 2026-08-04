@@ -139,8 +139,12 @@ function ControlStation() {
   const horn = useCallback(() => {
     sendAction("horn");
     try {
-      const ctx = audioRef.current ?? new AudioContext();
-      audioRef.current = ctx;
+      let ctx = audioRef.current;
+      if (!ctx || ctx.state === "closed") {
+        ctx = new AudioContext();
+        audioRef.current = ctx;
+      }
+      if (ctx.state === "suspended") void ctx.resume();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.frequency.value = 440;
@@ -148,10 +152,31 @@ function ControlStation() {
       osc.connect(gain).connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.25);
-    } catch {
-      /* ignore */
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch (err) {
+          console.debug("Kunde inte koppla loss ljudnoder", err);
+        }
+      };
+    } catch (err) {
+      console.debug("Tutljud kunde inte spelas upp", err);
     }
   }, [sendAction]);
+
+  // Stäng AudioContext vid unmount – annars ackumuleras kontexter (webbläsare
+  // har ett tak) och tutan slutar fungera efter några remounts.
+  useEffect(() => {
+    return () => {
+      const ctx = audioRef.current;
+      audioRef.current = null;
+      if (ctx && ctx.state !== "closed") {
+        void ctx.close().catch(() => undefined);
+      }
+    };
+  }, []);
+
 
   const [detailsOpen, setDetailsOpen] = useState(false);
 
