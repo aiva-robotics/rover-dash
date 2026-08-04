@@ -31,13 +31,13 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
   return (
     <div className="glass-panel flex items-center justify-between gap-3 px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-[0.6rem] font-bold text-primary">
-          A
-        </span>
-        <span className="truncate text-sm font-semibold tracking-wide">
-          AIVA <span className="font-normal text-muted-foreground">Robotics</span>
-        </span>
+        <img
+          src={aivaLogo.url}
+          alt="AIVA Robotics"
+          className="h-6 w-auto shrink-0 object-contain"
+        />
       </div>
+
 
       <div className="flex shrink-0 items-center gap-3 text-[0.7rem] text-muted-foreground">
         <span className="flex items-center gap-1.5">
