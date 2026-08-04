@@ -186,8 +186,13 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
   const isMobile = () =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches;
 
+  const detectPortrait = () =>
+    typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+
   const lockLandscape = async () => {
     if (!isMobile()) return;
+    const inPortrait = detectPortrait();
+    setPortrait(inPortrait);
     const orientation = screen.orientation as OrientationLockable | undefined;
     try {
       if (orientation?.lock) {
@@ -198,7 +203,8 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
     } catch {
       // iOS Safari m.fl. tillåter inte orienteringslås.
     }
-    setRotate(window.innerHeight > window.innerWidth);
+    // Fallback: rotera innehållet själva om vi är i porträtt.
+    setRotate(inPortrait);
   };
 
   const unlockOrientation = () => {
@@ -208,6 +214,7 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
       // ignoreras
     }
     setRotate(false);
+    setPortrait(false);
   };
 
   // Håll state i synk om användaren lämnar helskärm med systemgesten.
@@ -221,6 +228,24 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+
+  // Uppdatera rotationsstatus om användaren vrider enheten under helskärm.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => {
+      const inPortrait = detectPortrait();
+      setPortrait(inPortrait);
+      if (fullscreen && isMobile()) {
+        setRotate(inPortrait);
+      }
+    };
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, [fullscreen]);
 
   const toggle = async () => {
     const el = wrapRef.current;
