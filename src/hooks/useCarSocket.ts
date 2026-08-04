@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CarStatus, ConnectionState, DriveCommand, LogEntry } from "@/lib/car-protocol";
+import { translate, type TFunc, type TKey, type TVars } from "@/lib/i18n";
 
 const SEND_INTERVAL = 50; // ms -> 20 Hz, måste vara snabbare än serverns watchdog
 const PING_INTERVAL = 1000;
@@ -19,6 +20,10 @@ type Options = {
   token?: string;
   enabled: boolean;
   demoMode: boolean;
+  /** Översättningsfunktion – styr språket i loggar och felmeddelanden. */
+  t?: TFunc;
+  /** Locale för tidsstämplar i loggen. */
+  locale?: string;
 };
 
 export type SocketHealth = {
@@ -56,52 +61,6 @@ export type SocketError = {
   url: string;
   attempts: number;
   at: number;
-};
-
-const ERROR_TEXT: Record<SocketErrorCode, { title: string; message: string; hint: string }> = {
-  unreachable: {
-    title: "Når inte styrservern",
-    message:
-      "Webbläsaren får ingen kontakt med bilens WebSocket-server. Servern kan vara stoppad, fel adress eller blockerad av nätverket.",
-    hint: "Kontrollera på Pi:n: sudo systemctl status rc-car-server",
-  },
-  dropped: {
-    title: "Anslutningen bröts",
-    message:
-      "Kontakten med bilen tappades. Bilen går automatiskt till nödstopp (neutral gas och styrning) via serverns watchdog.",
-    hint: "Kolla WiFi-signalen och: sudo journalctl -u rc-car-server -n 30",
-  },
-  stale: {
-    title: "Bilen svarar inte",
-    message:
-      "Anslutningen ser öppen ut men bilen har slutat svara på ping. Sannolikt tappad WiFi-länk eller hängd styrserver – bilen går till nödstopp via watchdogen.",
-    hint: "Kolla WiFi-täckningen och: sudo systemctl status rc-car-server",
-  },
-  busy: {
-    title: "Bilen är upptagen",
-    message: "En annan klient styr redan bilen. Servern tillåter bara en förare i taget.",
-    hint: "Stäng den andra fliken/enheten och försök igen.",
-  },
-  taken_over: {
-    title: "Styrningen övertagen",
-    message: "En annan klient tog över styrningen av bilen.",
-    hint: "Tryck Försök ansluta igen för att ta tillbaka kontrollen.",
-  },
-  unauthorized: {
-    title: "Fel åtkomsttoken",
-    message: "Styrservern avvisade anslutningen eftersom token saknas eller är felaktig.",
-    hint: "Ange samma token som RC_TOKEN på Pi:n under Inställningar.",
-  },
-  invalid_url: {
-    title: "Ogiltig WebSocket-adress",
-    message: "Adressen kunde inte tolkas som en WebSocket-adress.",
-    hint: "Adressen ska börja med ws:// eller wss://, t.ex. ws://192.168.1.50:81",
-  },
-  no_url: {
-    title: "Ingen WebSocket-adress",
-    message: "Det finns ingen adress till bilens styrserver.",
-    hint: "Ange adressen under Inställningar.",
-  },
 };
 
 const initialHealth: SocketHealth = {
@@ -150,7 +109,18 @@ function toBase64Url(value: string): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
+export function useCarSocket({
+  url,
+  token = "",
+  enabled,
+  demoMode,
+  t: tProp,
+  locale = "en-GB",
+}: Options) {
+  const tRef = useRef<TFunc>(tProp ?? ((key, vars) => translate("en", key, vars)));
+  tRef.current = tProp ?? ((key, vars) => translate("en", key, vars));
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
   const [connection, setConnection] = useState<ConnectionState>("disconnected");
   const [status, setStatus] = useState<CarStatus>({});
   const [ping, setPing] = useState<number | null>(null);
@@ -202,8 +172,16 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
   }, []);
 
   const raiseError = useCallback((code: SocketErrorCode, targetUrl: string, attempts: number) => {
-    const text = ERROR_TEXT[code];
-    setLastError({ code, ...text, url: targetUrl, attempts, at: Date.now() });
+    const tr = tRef.current;
+    setLastError({
+      code,
+      title: tr(`err.${code}.title` as TKey),
+      message: tr(`err.${code}.message` as TKey),
+      hint: tr(`err.${code}.hint` as TKey),
+      url: targetUrl,
+      attempts,
+      at: Date.now(),
+    });
   }, []);
 
   const log = useCallback((level: LogEntry["level"], message: string) => {
@@ -211,7 +189,7 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
       [
         {
           id: ++logId,
-          time: new Date().toLocaleTimeString("sv-SE"),
+          time: new Date().toLocaleTimeString(localeRef.current),
           level,
           message,
         },
@@ -219,6 +197,14 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
       ].slice(0, MAX_LOGS),
     );
   }, []);
+
+  /** Loggar en översatt nyckel – språket avgörs vid loggtillfället. */
+  const logKey = useCallback(
+    (level: LogEntry["level"], key: TKey, vars?: TVars) => {
+      log(level, tRef.current(key, vars));
+    },
+    [log],
+  );
 
   const recordPing = useCallback(
     (rtt: number) => {
@@ -273,7 +259,7 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
     if (!demoMode || !enabled) return;
     setConnection("connecting");
     setLastError(null);
-    log("info", "Demoläge startat – simulerad bil");
+    logKey("info", "logmsg.demoStarted");
     const start = setTimeout(() => {
       setConnection("connected");
       patchHealth({
@@ -283,7 +269,7 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
         nextRetryAt: null,
       });
       flushNow();
-      log("info", "Ansluten till demo-fordon");
+      logKey("info", "logmsg.demoConnected");
     }, 600);
     const tick = setInterval(() => {
       const t = Date.now() / 1000;
@@ -336,12 +322,11 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
       if (closed) return;
       setConnection("connecting");
       patchHealth({ nextRetryAt: null });
-      log(
-        "info",
-        retryRef.current > 0
-          ? `Återansluter till ${url} (försök ${retryRef.current + 1})`
-          : `Ansluter till ${url}`,
-      );
+      if (retryRef.current > 0) {
+        logKey("info", "logmsg.reconnectingTo", { url, n: retryRef.current + 1 });
+      } else {
+        logKey("info", "logmsg.connecting", { url });
+      }
       let sock: WebSocket;
       openedRef.current = false;
       serverErrorRef.current = null;
@@ -350,7 +335,7 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
         if (token) protocols.push(`rc-token.${toBase64Url(token)}`);
         sock = new WebSocket(url, protocols);
       } catch {
-        log("error", "Ogiltig WebSocket-adress");
+        logKey("error", "logmsg.invalidUrl");
         raiseError("invalid_url", url, retryRef.current);
         setConnection("disconnected");
         return;
@@ -375,7 +360,7 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
           packetLoss: 0,
         });
         flushNow();
-        log("info", "Anslutning upprättad");
+        logKey("info", "logmsg.connected");
       };
       sock.onmessage = (event) => {
         patchHealth({
@@ -390,10 +375,11 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
             return;
           }
           if (data.photo) {
-            log(
-              data.photo.ok ? "info" : "error",
-              data.photo.ok ? `Bild sparad på bilen: ${data.photo.path}` : "Bilen kunde inte ta bild",
-            );
+            if (data.photo.ok) {
+              logKey("info", "logmsg.photoSavedCar", { path: String(data.photo.path ?? "") });
+            } else {
+              logKey("error", "logmsg.photoFailedCar");
+            }
             return;
           }
           if (
@@ -408,10 +394,10 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
           }
           statusRef.current = { ...statusRef.current, ...data };
         } catch {
-          log("warn", "Kunde inte tolka meddelande från bilen");
+          logKey("warn", "logmsg.parseFailed");
         }
       };
-      sock.onerror = () => log("error", "WebSocket-fel");
+      sock.onerror = () => logKey("error", "logmsg.wsError");
       sock.onclose = (event) => {
         socketRef.current = null;
         setConnection("disconnected");
@@ -435,7 +421,7 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
         const code: SocketErrorCode =
           serverErrorRef.current ?? (openedRef.current ? "dropped" : "unreachable");
         raiseError(code, url, retryRef.current);
-        log("warn", `Anslutningen bröts – nytt försök om ${Math.round(delay / 1000)} s`);
+        logKey("warn", "logmsg.dropped", { s: Math.round(delay / 1000) });
         timersRef.current.push(setTimeout(connect, delay));
       };
     };
@@ -454,7 +440,7 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
     token,
     enabled,
     demoMode,
-    log,
+    logKey,
     recordPing,
     manualNonce,
     raiseError,
@@ -481,7 +467,7 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
         lastPongRef.current > 0 &&
         Date.now() - lastPongRef.current > PONG_TIMEOUT
       ) {
-        log("error", "Bilen svarar inte på ping – kopplar ner och försöker igen");
+        logKey("error", "logmsg.noPong");
         serverErrorRef.current = "stale";
         lastPongRef.current = 0;
         sock.close();
@@ -500,17 +486,19 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
       clearInterval(interval);
       clearInterval(heartbeat);
     };
-  }, [sendJson, demoMode, patchHealth, log]);
+  }, [sendJson, demoMode, patchHealth, logKey]);
 
   const sendAction = useCallback(
     (action: string, value?: unknown) => {
-      log("info", `Kommando: ${action}${value !== undefined ? ` = ${String(value)}` : ""}`);
+      logKey("info", "logmsg.command", {
+        cmd: `${action}${value !== undefined ? ` = ${String(value)}` : ""}`,
+      });
       if (demoMode) return true;
       const ok = sendJson({ action, value });
-      if (!ok) log("error", `Kommandot "${action}" kunde inte skickas – ingen anslutning`);
+      if (!ok) logKey("error", "logmsg.commandFailed", { action });
       return ok;
     },
-    [sendJson, log, demoMode],
+    [sendJson, logKey, demoMode],
   );
 
   return {
