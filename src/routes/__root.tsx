@@ -79,14 +79,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "RC Control Station — FPV camera car control" },
+      { name: "description", content: "Mobile-first control station for an RC car with a Raspberry Pi camera: live video, HUD, joysticks and realtime telemetry." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "RC Control Station — FPV camera car control" },
+      { property: "og:description", content: "Mobile-first control station for an RC car with a Raspberry Pi camera: live video, HUD, joysticks and realtime telemetry." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "RC Control Station — FPV camera car control" },
+      { name: "twitter:description", content: "Mobile-first control station for an RC car with a Raspberry Pi camera: live video, HUD, joysticks and realtime telemetry." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/3682b5bc-4cb2-46ba-bb68-5a86b71ea6ca" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/3682b5bc-4cb2-46ba-bb68-5a86b71ea6ca" },
     ],
     links: [
       {

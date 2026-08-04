@@ -28,7 +28,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "RC Control Station — FPV camera car control" },
       {
         property: "og:description",
-        content: "Live video, driving HUD, virtual joysticks and telemetry over WebSocket.",
+        content: "Mobile-first control station for an RC car with a Raspberry Pi camera: live video, HUD, joysticks and realtime telemetry.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
