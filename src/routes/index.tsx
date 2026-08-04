@@ -256,8 +256,11 @@ function ControlStation() {
         onDemoMode={() => {
           setEstop(false);
           update({ demoMode: true });
+          // Startar om simuleringen även om demoläget redan var påslaget.
+          reconnectNow();
           log("info", "Växlade till demoläge");
         }}
+
       />
     </main>
   );

@@ -312,14 +312,19 @@ export function useCarSocket({ url, token = "", enabled, demoMode }: Options) {
       patchHealth({ connectedSince: null });
       flushNow();
     };
-  }, [demoMode, enabled, log, recordPing, patchHealth, flushNow]);
+  }, [demoMode, enabled, manualNonce, log, recordPing, patchHealth, flushNow]);
 
   // --- Real WebSocket --------------------------------------------------
   useEffect(() => {
-    if (demoMode || !enabled) {
+    if (demoMode) {
+      // Demoeffekten äger anslutningsstatusen i demoläge.
+      return;
+    }
+    if (!enabled) {
       setConnection("disconnected");
       return;
     }
+
     if (!url) {
       setConnection("disconnected");
       raiseError("no_url", "", 0);
