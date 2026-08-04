@@ -1,15 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Images, Settings as SettingsIcon } from "lucide-react";
 import { VideoFeed, type VideoFeedHandle } from "@/components/car/VideoFeed";
 import { DrivingHUD, type HudMode } from "@/components/car/DrivingHUD";
 import { Joystick } from "@/components/car/Joystick";
 import { ControlButtons } from "@/components/car/ControlButtons";
 import { StatusBar } from "@/components/car/StatusBar";
 import { DetailsDrawer } from "@/components/car/DetailsDrawer";
+import { PhotoGallery } from "@/components/car/PhotoGallery";
 import { ConnectionLostOverlay } from "@/components/car/ConnectionLostOverlay";
 import { useCarSocket, sessionId } from "@/hooks/useCarSocket";
+import { usePhotoGallery } from "@/hooks/usePhotoGallery";
 import { useSettings } from "@/hooks/useSettings";
+import { downloadBlob, photoFileName } from "@/lib/photoStore";
 import { clamp } from "@/lib/car-protocol";
 
 export const Route = createFileRoute("/")({
