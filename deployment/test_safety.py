@@ -64,8 +64,9 @@ class FakeWS:
             protos.append("rc-token." + _b64(token))
         if session:
             protos.append("rc-session." + _b64(session))
-        self.request = FakeRequest(path)
+        self.request = FakeRequest(path, protos)
         self.request_headers = {"Sec-WebSocket-Protocol": ", ".join(protos)}
+
         self.subprotocols = protos
         self.remote_address = ("10.0.0.5", 1234)
         self.sent: list[str] = []
