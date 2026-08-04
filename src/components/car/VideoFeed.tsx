@@ -264,7 +264,7 @@ export function VideoFeed({ src, online, flipH, flipV, children }: Props) {
     <div
       ref={wrapRef}
       className={cn(
-        "glass-panel relative aspect-video w-full overflow-hidden bg-black/60",
+        "glass-panel relative aspect-video w-full overflow-hidden bg-muted",
         overlay && "fixed inset-0 z-40 aspect-auto h-screen rounded-none",
         fullscreen && rotate && "aspect-auto",
       )}

@@ -42,7 +42,7 @@ function Bar({ value, label }: { value: number; label: string }) {
   const positive = value >= 0;
   return (
     <div className="flex items-center gap-2">
-      <span className="w-10 text-[0.6rem] uppercase tracking-widest text-foreground/60">
+      <span className="w-10 text-[0.6rem] uppercase tracking-widest text-foreground/75">
         {label}
       </span>
       <div className="relative h-1.5 w-24 overflow-hidden rounded-full bg-foreground/15">
@@ -98,7 +98,7 @@ export function DrivingHUD({
 
 
       <div className={`flex ${rowClass} items-start justify-between gap-2`}>
-        <div className="flex items-center gap-3 rounded-full bg-background/45 px-3 py-1.5 backdrop-blur-md">
+        <div className="flex items-center gap-3 rounded-full bg-background/80 px-3 py-1.5 backdrop-blur-md">
           <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums">
             <Battery className="h-4 w-4 text-primary" />
             {battery !== undefined ? `${battery}%` : "--"}
@@ -114,14 +114,14 @@ export function DrivingHUD({
               <Circle className="h-2 w-2 animate-pulse fill-current" /> Rec
             </span>
           )}
-          <div className="relative grid h-12 w-12 place-items-center rounded-full bg-background/45 backdrop-blur-md">
+          <div className="relative grid h-12 w-12 place-items-center rounded-full bg-background/80 backdrop-blur-md">
             <div
               className="-mt-1.5 text-[0.6rem] font-bold text-primary transition-transform duration-300"
               style={{ transform: `rotate(${headingDeg}deg)` }}
             >
               ▲
             </div>
-            <span className="absolute bottom-1 font-mono text-[0.55rem] leading-none tabular-nums text-foreground/70">
+            <span className="absolute bottom-1 font-mono text-[0.55rem] leading-none tabular-nums text-foreground/75">
               {Math.round(heading)}°
             </span>
           </div>
@@ -131,15 +131,15 @@ export function DrivingHUD({
       <div
         className={`flex ${rowClass} items-end justify-between gap-3 ${flipH ? "pl-11" : "pr-11"}`}
       >
-        <div className="space-y-1.5 rounded-xl bg-background/45 px-3 py-2 backdrop-blur-md">
+        <div className="space-y-1.5 rounded-xl bg-background/80 px-3 py-2 backdrop-blur-md">
           <Bar label="Gas" value={throttleValue} />
           <Bar label="Ratt" value={steeringValue} />
         </div>
-        <div className="rounded-xl bg-background/45 px-3 py-1.5 text-right backdrop-blur-md">
+        <div className="rounded-xl bg-background/80 px-3 py-1.5 text-right backdrop-blur-md">
           <div className="font-mono text-2xl font-bold leading-none tabular-nums text-primary">
             {Math.round(status.speed ?? 0)}
           </div>
-          <div className="text-[0.55rem] uppercase tracking-[0.2em] text-foreground/60">km/h</div>
+          <div className="text-[0.55rem] uppercase tracking-[0.2em] text-foreground/75">km/h</div>
         </div>
       </div>
 
