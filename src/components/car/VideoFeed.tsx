@@ -48,6 +48,8 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
   const [visible, setVisible] = useState(true);
   // Sant när enheten inte kan låsa orienteringen – då roterar vi bilden själva.
   const [rotate, setRotate] = useState(false);
+  // Används för att visa en uppmaning om att vrida enheten.
+  const [portrait, setPortrait] = useState(false);
 
   const lastFrameAt = useRef(0);
   const lastFrameCount = useRef<number | null>(null);
