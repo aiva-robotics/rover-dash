@@ -49,8 +49,10 @@ def _b64(value: str) -> str:
 
 
 class FakeRequest:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, protocols: list[str]) -> None:
         self.path = path
+        self.headers = {"Sec-WebSocket-Protocol": ", ".join(protocols)}
+
 
 
 class FakeWS:
