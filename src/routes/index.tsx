@@ -345,6 +345,16 @@ function ControlStation() {
         onOpenChange={setDetailsOpen}
       />
 
+      <PhotoGallery
+        photos={photos}
+        open={galleryOpen}
+        onOpenChange={setGalleryOpen}
+        onRemove={(id) => void removePhoto(id)}
+        onClear={() => void clearAll()}
+      />
+
+
+
       <ConnectionLostOverlay
         visible={hydrated && (connection === "disconnected" || estop)}
         reason={estop ? "estop" : "connection"}
