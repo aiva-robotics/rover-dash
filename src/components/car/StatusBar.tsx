@@ -16,7 +16,8 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
   const hasDriver = Boolean(driver?.session || driver?.label);
   const isMe = Boolean(driver?.session && driver.session === sessionId);
 
-  const battery = status.batteryPercent ?? (status.battery ? Math.round(status.battery) : undefined);
+  const battery =
+    status.batteryPercent ?? (status.battery !== undefined ? voltageToPercent(status.battery) : undefined);
   const wifi = status.rssi !== undefined ? status.rssi : undefined;
 
   const driverText = !online
