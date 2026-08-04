@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Camera, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 
 export type VideoFeedHandle = {
   /** Fångar aktuell bildruta som JPEG. Returnerar null om ingen ström finns. */
@@ -55,6 +56,7 @@ function healthUrlFrom(src: string): string | null {
 }
 
 export function VideoFeed({ src, online, flipH, flipV, children, overlayControls, ref }: Props) {
+  const { t } = useI18n();
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
