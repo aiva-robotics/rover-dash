@@ -65,7 +65,7 @@ function Toggle({
       onClick={() => onChange(!checked)}
       className="glass-panel grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-left"
     >
-      <span className="min-w-0 truncate text-sm">{label}</span>
+      <span className="min-w-0 text-sm leading-snug">{label}</span>
       <span
         className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
           checked ? "bg-primary" : "bg-muted"
@@ -206,7 +206,7 @@ function SettingsPage() {
           </div>
         </Field>
 
-        <div className="grid grid-cols-2 gap-2 pt-1">
+        <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
           <Toggle
             label={t("settings.flipH")}
             checked={settings.videoFlipH}
