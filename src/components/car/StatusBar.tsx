@@ -31,18 +31,15 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
         : "Annan styr";
 
   return (
-    <div className="glass-panel flex items-center justify-between gap-3 px-3 py-2.5">
-      <div className="flex min-w-0 items-center gap-2">
-        <img
-          src={aivaLogo.url}
-          alt="AIVA Robotics"
-          className="h-6 w-auto shrink-0 object-contain"
-        />
-      </div>
+    <div className="glass-panel grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 overflow-hidden px-3 py-2.5">
+      <img
+        src={aivaLogo.url}
+        alt="AIVA Robotics"
+        className="h-6 w-auto shrink-0 object-contain"
+      />
 
-
-      <div className="flex shrink-0 items-center gap-3 text-[0.7rem] text-muted-foreground">
-        <span className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center justify-end gap-2 text-[0.7rem] text-muted-foreground sm:gap-3">
+        <span className="flex shrink-0 items-center gap-1.5">
           <span
             className={cn(
               "h-2 w-2 rounded-full",
@@ -52,21 +49,23 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
           <span className="hidden sm:inline">{online ? "Ansluten" : "Frånkopplad"}</span>
         </span>
 
-        <span className="flex items-center gap-1 font-mono tabular-nums">
+        <span className="hidden shrink-0 items-center gap-1 font-mono tabular-nums sm:flex">
           <Wifi className="h-3 w-3" />
           {wifi !== undefined ? `${wifi} dBm` : "—"}
         </span>
 
-        <span className="flex items-center gap-1 font-mono tabular-nums">
+        <span className="flex shrink-0 items-center gap-1 font-mono tabular-nums">
           <Battery className="h-3 w-3" />
           {battery !== undefined ? `${battery}%` : "—"}
         </span>
 
-        <span className="font-mono tabular-nums">{ping !== null ? `${ping} ms` : "—"}</span>
+        <span className="hidden shrink-0 font-mono tabular-nums sm:inline">
+          {ping !== null ? `${ping} ms` : "—"}
+        </span>
 
         <span
           className={cn(
-            "rounded-full border px-2 py-0.5 text-[0.6rem] uppercase tracking-wider",
+            "min-w-0 truncate rounded-full border px-2 py-0.5 text-[0.6rem] uppercase tracking-wider",
             isMe && online
               ? "border-primary/40 bg-primary/10 text-primary"
               : hasDriver && online
