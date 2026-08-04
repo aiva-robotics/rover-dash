@@ -389,9 +389,13 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
         </div>
       ) : null}
 
-      {/* Tydlig uppmaning på mobil när vi tvingar landskap via CSS-rotation. */}
+      {/* Tydlig uppmaning på mobil när vi tvingar landskap via CSS-rotation.
+          Texten motroteras så att den är läsbar även när containern är roterad. */}
       {fullscreen && portrait && rotate ? (
-        <div className="pointer-events-none absolute left-1/2 top-4 z-50 -translate-x-1/2 rounded-full bg-background/80 px-4 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md">
+        <div
+          className="pointer-events-none absolute left-1/2 top-4 z-50 rounded-full bg-background/80 px-4 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md"
+          style={{ transform: "translateX(-50%) rotate(-90deg)" }}
+        >
           Vrid enheten till landskap
         </div>
       ) : null}
