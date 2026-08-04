@@ -60,7 +60,7 @@ export function DetailsDrawer({
             health={health}
             connection={connection}
             ping={ping}
-            onReconnect={() => {}}
+            onReconnect={onReconnect}
           />
           <DriverPanel status={status} connection={connection} sessionId={sessionId} />
           <LogPanel logs={logs} />
