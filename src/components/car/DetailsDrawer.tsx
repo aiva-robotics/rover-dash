@@ -16,6 +16,7 @@ type Props = {
   logs: LogEntry[];
   error: SocketError | null;
   sessionId: string;
+  onReconnect: () => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
