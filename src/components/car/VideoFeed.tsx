@@ -349,16 +349,16 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
   const streamSrc = attempt > 0 ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src;
 
   const statusText = !online
-    ? "Bilen är frånkopplad"
+    ? t("video.offline")
     : !src
-      ? "Ingen videoadress angiven"
+      ? t("video.noAddress")
       : !netOnline
-        ? "Enheten saknar nätverk"
+        ? t("video.noNetwork")
         : !visible
-          ? "Strömmen pausad (fliken i bakgrunden)"
+          ? t("video.paused")
           : healthOk === false
-            ? "Kameraservern svarar inte"
-            : "Försöker återansluta till kameran…";
+            ? t("video.cameraNotResponding")
+            : t("video.retrying");
 
   return (
     <div
@@ -389,7 +389,7 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
           ref={imgRef}
           key={attempt}
           src={streamSrc}
-          alt="Livevideo från bilens kamera"
+          alt={t("video.alt")}
           className="h-full w-full object-cover"
           decoding="async"
           // Krävs för att kunna rita bildrutan till canvas när kameraservern
@@ -423,11 +423,11 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
           <div className="text-center">
             <Camera className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-2 text-xs uppercase tracking-[0.25em] text-muted-foreground">
-              Ingen videosignal
+              {t("video.noSignal")}
             </p>
             <p className="mt-1 text-[0.65rem] tracking-[0.15em] text-muted-foreground/70">
               {statusText}
-              {attempt > 0 ? ` (försök ${attempt})` : ""}
+              {attempt > 0 ? ` ${t("video.attempt", { n: attempt })}` : ""}
             </p>
             {online && src ? (
               <button
@@ -436,7 +436,7 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
                 className="mx-auto mt-3 flex items-center gap-2 rounded-lg bg-background/60 px-3 py-1.5 text-[0.7rem] uppercase tracking-[0.15em] text-foreground backdrop-blur-md transition-colors hover:bg-background/90"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                Försök igen
+                {t("video.retry")}
               </button>
             ) : null}
           </div>
@@ -457,7 +457,7 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
 
       {showImage && !streaming ? (
         <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-background/60 px-2 py-1 text-[0.6rem] uppercase tracking-[0.2em] text-muted-foreground backdrop-blur-md">
-          Ansluter…
+          {t("video.connecting")}
         </div>
       ) : null}
 
@@ -481,14 +481,14 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
           className="pointer-events-none absolute left-1/2 top-4 z-50 rounded-full bg-background/80 px-4 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur-md"
           style={{ transform: "translateX(-50%) rotate(-90deg)" }}
         >
-          Vrid enheten till landskap
+          {t("video.rotate")}
         </div>
       ) : null}
 
       <button
         type="button"
         onClick={toggle}
-        aria-label="Helskärm"
+        aria-label={t("video.fullscreen")}
         className={cn(
           "pointer-events-auto absolute right-3 grid h-9 w-9 place-items-center rounded-lg bg-background/50 text-foreground backdrop-blur-md transition-colors hover:bg-background/80",
           fullscreen && overlayControls ? "top-3" : "bottom-3",
