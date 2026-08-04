@@ -199,7 +199,9 @@ function ControlStation() {
       </div>
 
       <VideoFeed
+        ref={videoRef}
         src={settings.videoUrl}
+
         online={online || settings.demoMode}
         flipH={settings.videoFlipH}
         flipV={settings.videoFlipV}
