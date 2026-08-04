@@ -1,15 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Images, Settings as SettingsIcon } from "lucide-react";
 import { VideoFeed, type VideoFeedHandle } from "@/components/car/VideoFeed";
 import { DrivingHUD, type HudMode } from "@/components/car/DrivingHUD";
 import { Joystick } from "@/components/car/Joystick";
 import { ControlButtons } from "@/components/car/ControlButtons";
 import { StatusBar } from "@/components/car/StatusBar";
 import { DetailsDrawer } from "@/components/car/DetailsDrawer";
+import { PhotoGallery } from "@/components/car/PhotoGallery";
 import { ConnectionLostOverlay } from "@/components/car/ConnectionLostOverlay";
 import { useCarSocket, sessionId } from "@/hooks/useCarSocket";
+import { usePhotoGallery } from "@/hooks/usePhotoGallery";
 import { useSettings } from "@/hooks/useSettings";
+import { downloadBlob, photoFileName } from "@/lib/photoStore";
 import { clamp } from "@/lib/car-protocol";
 
 export const Route = createFileRoute("/")({
@@ -179,7 +182,14 @@ function ControlStation() {
     };
   }, []);
 
-  /** Tar en stillbild: sparas på bilen och laddas ner till enheten. */
+  const {
+    photos,
+    addPhoto,
+    removePhoto,
+    clearAll,
+  } = usePhotoGallery(hydrated);
+
+  /** Tar en stillbild: sparas på bilen, i galleriet och laddas ner till enheten. */
   const handlePhoto = useCallback(async () => {
     sendAction("photo");
     try {
@@ -188,35 +198,47 @@ function ControlStation() {
         log("error", "Ingen videoström att fånga – bilden kunde inte laddas ner");
         return;
       }
-      const now = new Date();
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const name = `rc-bild-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.jpg`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const takenAt = Date.now();
+      const name = photoFileName(takenAt);
+      try {
+        await addPhoto(blob, takenAt);
+      } catch (err) {
+        console.debug("Kunde inte spara bild i galleriet", err);
+      }
+      downloadBlob(blob, name);
       log("info", `Bild sparad: ${name}`);
     } catch (err) {
       log("error", `Kunde inte spara bilden: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [log, sendAction]);
+  }, [addPhoto, log, sendAction]);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+
 
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-3 p-3 pb-8">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
         <StatusBar
           status={status}
           connection={connection}
           ping={ping}
           sessionId={hydrated ? sessionId() : ""}
         />
+        <button
+          type="button"
+          onClick={() => setGalleryOpen(true)}
+          aria-label={`Bildgalleri (${photos.length} bilder)`}
+          className="glass-panel relative grid h-10 w-10 shrink-0 place-items-center transition-colors hover:text-primary"
+        >
+          <Images className="h-4 w-4" />
+          {photos.length > 0 && (
+            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 font-mono text-[0.6rem] text-primary-foreground">
+              {photos.length}
+            </span>
+          )}
+        </button>
         <Link
           to="/settings"
           aria-label="Inställningar"
@@ -225,6 +247,7 @@ function ControlStation() {
           <SettingsIcon className="h-4 w-4" />
         </Link>
       </div>
+
 
       <VideoFeed
         ref={videoRef}
@@ -321,6 +344,16 @@ function ControlStation() {
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
       />
+
+      <PhotoGallery
+        photos={photos}
+        open={galleryOpen}
+        onOpenChange={setGalleryOpen}
+        onRemove={(id) => void removePhoto(id)}
+        onClear={() => void clearAll()}
+      />
+
+
 
       <ConnectionLostOverlay
         visible={hydrated && (connection === "disconnected" || estop)}
