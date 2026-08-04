@@ -9,7 +9,6 @@ type Props = {
   recording?: boolean | undefined;
   mode?: HudMode | undefined;
   flipH?: boolean | undefined;
-  flipV?: boolean | undefined;
 };
 
 const MODE_STYLES: Record<HudMode, { label: string; className: string; pulse: boolean }> = {
@@ -42,7 +41,6 @@ export function DrivingHUD({
   recording,
   mode = "live",
   flipH = false,
-  flipV = false,
 }: Props) {
   const battery =
     status.batteryPercent ?? (status.battery ? voltageToPercent(status.battery) : undefined);
