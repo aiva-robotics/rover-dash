@@ -1,49 +1,30 @@
-Bakgrund
---------
-`deployment/pi-camera-server.py` använder redan libcamera `Transform(hflip=..., vflip=...)` styrt av miljövariablerna `CAM_HFLIP` / `CAM_VFLIP`. Detta är en hårdvarutransform och kostar i princip inget. För användaren är det dock smidigare att också kunna vända direkt i appen (CSS-transform, GPU-accelererat, ingen prestandapåverkan).
+# Rensad kontrollstation — fokus på körning
 
-Plan
-----
-1. Utöka inställningar (`src/hooks/useSettings.tsx`)
-   - Lägg till `videoFlipH: boolean` och `videoFlipV: boolean` i `Settings`-typen och `defaultSettings`.
+Idag visas allt samtidigt på startsidan: video + HUD, förarpanel, telemetri (6 rutor), joysticks, knappar, anslutningshälsa (12 mätvärden), framtidspaneler och logg. Det blir en lång, rörig sida där det viktiga (video, styrning, nödstopp) drunknar.
 
-2. Lägg till reglage på inställningssidan (`src/routes/settings.tsx`)
-   - Två nya toggles:
-     - "Vänd bild horisontellt"
-     - "Vänd bild vertikalt"
-   - Placera dem i en ny sektion under videoinställningarna.
+## Nytt upplägg
 
-3. Applicera vändning i videokomponenten (`src/components/car/VideoFeed.tsx`)
-   - Ta emot nya props `flipH?: boolean` och `flipV?: boolean`.
-   - Applicera på `<img>` via inline style:
-     - `transform: scaleX(-1)` när `flipH` är true
-     - `transform: scaleY(-1)` när `flipV` är true
-     - kombinera med `scaleX(-1) scaleY(-1)` om båda är true
-   - CSS-transformen är GPU-komponerad och påverkar inte CPU/batteri.
+**Alltid synligt (ovanför "vecket"):**
+- Videoströmmen med HUD (batteri, wifi, hastighet, gas/ratt, läge)
+- Joysticks
+- Kontrollknappar (ljus, tuta, foto, nödstopp)
+- En smal statusrad högst upp: anslutningsprick + ping + batteri + "Du styr"/"Annan styr" i komprimerad form
 
-4. Träda inställningarna till `VideoFeed` (`src/routes/index.tsx`)
-   - Skicka med `flipH={settings.videoFlipH}` och `flipV={settings.videoFlipV}`.
+**Dolt bakom en "Detaljer"-panel (utfällbar längst ner, stängd som standard):**
+- Full telemetri (spänning, dBm, temperatur, hastighet, ping)
+- Anslutningshälsa (jitter, min/medel/max, paketförlust, försök, meddelanden)
+- Förarpanel med sessions-ID och övertagningshistorik
+- Logg
+- Framtidspaneler (GPS/AI) — flyttas hit helt
 
-5. Dokumentera hårdvarualternativet (`deployment/pi-camera.service` + docs)
-   - Behåll befintliga `Environment=CAM_HFLIP=0` och `Environment=CAM_VFLIP=0`.
-   - Lägg till en kort kommentar i tjänsten och i `docs/raspberry-pi-deployment.md` om att ändra dessa till `1` för att vända i kameran istället för i appen.
+**Fortsatt påträngande när det behövs:**
+- Nödstopp och anslutningsbortfall visas som idag med tydligt överlägg — ingenting av säkerhetsvärde göms.
+- Om anslutningen tappas eller pingen blir dålig lyfts ett kort felmeddelande upp i statusraden även om detaljpanelen är stängd.
 
-6. Uppdatera setup-scriptet (`scripts/pi-camera-setup.sh`)
-   - Säkerställ att en eventuellt redigerad tjänstefil inte skrivs över utan varning, eller dokumentera att användaren själv ändrar `CAM_HFLIP`/`CAM_VFLIP` i `/etc/systemd/system/pi-camera.service` efter installation.
+## Teknisk avgränsning
 
-Kontrollpunkter
----------------
-- [ ] Inställningssidan visar de nya toggles.
-- [ ] Videoströmmen vänder sig direkt när toggles ändras.
-- [ ] Helskärmsläget och landskapsrotation påverkas inte av vändningen.
-- [ ] Ingen synbar prestandaförlust mäts i dev-tools / på Pi.
-
-Berörda filer
--------------
-- `src/hooks/useSettings.tsx`
-- `src/routes/settings.tsx`
-- `src/components/car/VideoFeed.tsx`
-- `src/routes/index.tsx`
-- `deployment/pi-camera.service`
-- `scripts/pi-camera-setup.sh`
-- `docs/raspberry-pi-deployment.md`
+- Endast presentation ändras. `useCarSocket`, protokoll, inställningar och serverkod rörs inte.
+- Ny komponent `src/components/car/StatusBar.tsx` (kompakt topprad).
+- Ny komponent `src/components/car/DetailsDrawer.tsx` som samlar befintliga `TelemetryPanel`, `ConnectionHealthPanel`, `DriverPanel`, `LogPanel` och `FuturePanels` i en shadcn `Accordion`/`Collapsible`, öppet läge sparas i localStorage via befintlig settings-hook-stil (eller lokal state om vi vill hålla settings orörd).
+- `src/routes/index.tsx` byggs om till: header/statusrad → video+HUD → joysticks → knappar → detaljlåda.
+- Befintliga paneler behålls oförändrade internt, bara flyttade.
