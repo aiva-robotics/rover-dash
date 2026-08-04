@@ -445,6 +445,16 @@ export function VideoFeed({ src, online, flipH, flipV, children, overlayControls
 
       {children}
 
+      {/* Kort "blixt" som kvitterar att en bild fångats. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-0 z-50 bg-white transition-opacity duration-150",
+          flash ? "opacity-80" : "opacity-0",
+        )}
+      />
+
+
       {showImage && !streaming ? (
         <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-background/60 px-2 py-1 text-[0.6rem] uppercase tracking-[0.2em] text-muted-foreground backdrop-blur-md">
           Ansluter…
