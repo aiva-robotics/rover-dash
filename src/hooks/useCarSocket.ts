@@ -298,7 +298,7 @@ export function useCarSocket({
       patchHealth({ connectedSince: null });
       flushNow();
     };
-  }, [demoMode, enabled, manualNonce, log, recordPing, patchHealth, flushNow]);
+  }, [demoMode, enabled, manualNonce, logKey, recordPing, patchHealth, flushNow]);
 
   // --- Real WebSocket --------------------------------------------------
   useEffect(() => {
