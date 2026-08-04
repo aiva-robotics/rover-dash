@@ -219,13 +219,26 @@ function ControlStation() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-3 p-3 pb-8">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
         <StatusBar
           status={status}
           connection={connection}
           ping={ping}
           sessionId={hydrated ? sessionId() : ""}
         />
+        <button
+          type="button"
+          onClick={() => setGalleryOpen(true)}
+          aria-label={`Bildgalleri (${photos.length} bilder)`}
+          className="glass-panel relative grid h-10 w-10 shrink-0 place-items-center transition-colors hover:text-primary"
+        >
+          <Images className="h-4 w-4" />
+          {photos.length > 0 && (
+            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 font-mono text-[0.6rem] text-primary-foreground">
+              {photos.length}
+            </span>
+          )}
+        </button>
         <Link
           to="/settings"
           aria-label="Inställningar"
@@ -234,6 +247,7 @@ function ControlStation() {
           <SettingsIcon className="h-4 w-4" />
         </Link>
       </div>
+
 
       <VideoFeed
         ref={videoRef}
