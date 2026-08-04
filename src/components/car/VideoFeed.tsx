@@ -1,6 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Camera, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export type VideoFeedHandle = {
+  /** Fångar aktuell bildruta som JPEG. Returnerar null om ingen ström finns. */
+  captureFrame: () => Promise<Blob | null>;
+};
 
 type Props = {
   src: string;
@@ -10,6 +23,7 @@ type Props = {
   children?: ReactNode | undefined;
   /** Reglage som bara visas i helskärmsläge (gas/broms + styrning). */
   overlayControls?: ReactNode | undefined;
+  ref?: Ref<VideoFeedHandle> | undefined;
 };
 
 type OrientationLockable = ScreenOrientation & {
@@ -23,12 +37,12 @@ const STALL_MS = 6000;
 const HEALTH_INTERVAL = 5000;
 const HEALTH_TIMEOUT = 2500;
 
-function healthUrlFrom(src: string): string | null {
+function siblingUrlFrom(src: string, endpoint: string): string | null {
   try {
     const url = new URL(src, window.location.href);
     url.pathname = url.pathname.endsWith("/stream")
-      ? url.pathname.replace(/\/stream$/, "/health")
-      : "/health";
+      ? url.pathname.replace(/\/stream$/, `/${endpoint}`)
+      : `/${endpoint}`;
     url.search = "";
     return url.toString();
   } catch {
@@ -36,7 +50,12 @@ function healthUrlFrom(src: string): string | null {
   }
 }
 
-export function VideoFeed({ src, online, flipH, flipV, children, overlayControls }: Props) {
+function healthUrlFrom(src: string): string | null {
+  return siblingUrlFrom(src, "health");
+}
+
+export function VideoFeed({ src, online, flipH, flipV, children, overlayControls, ref }: Props) {
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
