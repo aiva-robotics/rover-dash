@@ -7,6 +7,7 @@ import { ConnectionHealthPanel } from "./ConnectionHealthPanel";
 import { DriverPanel } from "./DriverPanel";
 import { LogPanel } from "./LogPanel";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 
 type Props = {
   status: CarStatus;
@@ -33,6 +34,7 @@ export function DetailsDrawer({
   open,
   onOpenChange,
 }: Props) {
+  const { t } = useI18n();
   return (
     <Collapsible.Root open={open} onOpenChange={onOpenChange}>
       <Collapsible.Trigger asChild>
@@ -42,7 +44,7 @@ export function DetailsDrawer({
         >
           <span className="flex items-center gap-2 text-[0.7rem] uppercase tracking-[0.2em] text-muted-foreground">
             <Info className="h-3.5 w-3.5" />
-            Detaljer
+            {t("details.title")}
           </span>
           <ChevronDown
             className={cn(

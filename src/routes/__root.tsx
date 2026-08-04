@@ -10,6 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import { useI18n } from "@/hooks/useI18n";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SettingsProvider } from "../hooks/useSettings";
 
@@ -115,15 +116,26 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+/** Håller <html lang> i synk med valt gränssnittsspråk. */
+function LangSync() {
+  const { lang } = useI18n();
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       <SettingsProvider>
+        <LangSync />
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
       </SettingsProvider>
     </QueryClientProvider>
   );
 }
+

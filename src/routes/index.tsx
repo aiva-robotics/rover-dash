@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Images, Settings as SettingsIcon } from "lucide-react";
 import { VideoFeed, type VideoFeedHandle } from "@/components/car/VideoFeed";
-import { DrivingHUD, type HudMode } from "@/components/car/DrivingHUD";
+import { DrivingHUD, MODE_KEYS, type HudMode } from "@/components/car/DrivingHUD";
 import { Joystick } from "@/components/car/Joystick";
 import { ControlButtons } from "@/components/car/ControlButtons";
 import { StatusBar } from "@/components/car/StatusBar";
@@ -12,37 +12,34 @@ import { ConnectionLostOverlay } from "@/components/car/ConnectionLostOverlay";
 import { useCarSocket, sessionId } from "@/hooks/useCarSocket";
 import { usePhotoGallery } from "@/hooks/usePhotoGallery";
 import { useSettings } from "@/hooks/useSettings";
+import { useI18n } from "@/hooks/useI18n";
 import { downloadBlob, photoFileName } from "@/lib/photoStore";
 import { clamp } from "@/lib/car-protocol";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "RC Control Station — Fjärrstyr bil med FPV-kamera" },
+      { title: "RC Control Station — FPV camera car control" },
       {
         name: "description",
         content:
-          "Mobilanpassad kontrollstation för radiostyrd bil med Raspberry Pi-kamera: livevideo, HUD, joysticks och realtidstelemetri.",
+          "Mobile-first control station for an RC car with a Raspberry Pi camera: live video, HUD, joysticks and realtime telemetry.",
       },
-      { property: "og:title", content: "RC Control Station — Fjärrstyr bil med FPV-kamera" },
+      { property: "og:title", content: "RC Control Station — FPV camera car control" },
       {
         property: "og:description",
-        content: "Livevideo, driving-HUD, virtuella joysticks och telemetri över WebSocket.",
+        content: "Live video, driving HUD, virtual joysticks and telemetry over WebSocket.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: ControlStation,
 });
 
-const MODE_LABELS: Record<HudMode, string> = {
-  live: "Live",
-  demo: "Demoläge",
-  estop: "Nödstopp",
-  offline: "Frånkopplad",
-};
-
 function ControlStation() {
   const { settings, hydrated, update } = useSettings();
+  const { t, locale } = useI18n();
   const {
     connection,
     status,
@@ -59,6 +56,8 @@ function ControlStation() {
     token: settings.wsToken,
     enabled: hydrated,
     demoMode: settings.demoMode,
+    t,
+    locale,
   });
 
 
@@ -105,10 +104,10 @@ function ControlStation() {
     const timer = setTimeout(() => {
       if (estopWarnedRef.current) return;
       estopWarnedRef.current = true;
-      log("error", "Bilen har inte bekräftat nödstoppsläget – kontrollera anslutningen");
+      log("error", t("logmsg.estopNotAcked"));
     }, 1500);
     return () => clearTimeout(timer);
-  }, [estopPending, log]);
+  }, [estopPending, log, t]);
 
 
   useEffect(() => {
@@ -133,12 +132,16 @@ function ControlStation() {
     const from = prevMode.current;
     prevMode.current = hudMode;
     if (!from) return;
-    const stamp = new Date().toLocaleTimeString("sv-SE");
+    const stamp = new Date().toLocaleTimeString(locale);
     log(
       hudMode === "estop" || hudMode === "offline" ? "warn" : "info",
-      `[${stamp}] Läge: ${MODE_LABELS[from]} → ${MODE_LABELS[hudMode]}`,
+      t("logmsg.modeChange", {
+        time: stamp,
+        from: t(MODE_KEYS[from]),
+        to: t(MODE_KEYS[hudMode]),
+      }),
     );
-  }, [hudMode, hydrated, log]);
+  }, [hudMode, hydrated, log, t, locale]);
 
 
   const horn = useCallback(() => {
@@ -195,7 +198,7 @@ function ControlStation() {
     try {
       const blob = await videoRef.current?.captureFrame();
       if (!blob) {
-        log("error", "Ingen videoström att fånga – bilden kunde inte laddas ner");
+        log("error", t("logmsg.noFrame"));
         return;
       }
       const takenAt = Date.now();
@@ -206,11 +209,14 @@ function ControlStation() {
         console.debug("Kunde inte spara bild i galleriet", err);
       }
       downloadBlob(blob, name);
-      log("info", `Bild sparad: ${name}`);
+      log("info", t("logmsg.photoSaved", { name }));
     } catch (err) {
-      log("error", `Kunde inte spara bilden: ${err instanceof Error ? err.message : String(err)}`);
+      log(
+        "error",
+        t("logmsg.photoError", { error: err instanceof Error ? err.message : String(err) }),
+      );
     }
-  }, [addPhoto, log, sendAction]);
+  }, [addPhoto, log, sendAction, t]);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -229,7 +235,7 @@ function ControlStation() {
         <button
           type="button"
           onClick={() => setGalleryOpen(true)}
-          aria-label={`Bildgalleri (${photos.length} bilder)`}
+          aria-label={t("gallery.open", { n: photos.length })}
           className="glass-panel relative grid h-10 w-10 shrink-0 place-items-center transition-colors hover:text-primary"
         >
           <Images className="h-4 w-4" />
@@ -241,7 +247,7 @@ function ControlStation() {
         </button>
         <Link
           to="/settings"
-          aria-label="Inställningar"
+          aria-label={t("common.settings")}
           className="glass-panel grid h-10 w-10 shrink-0 place-items-center transition-colors hover:text-primary"
         >
           <SettingsIcon className="h-4 w-4" />
@@ -260,7 +266,7 @@ function ControlStation() {
           <>
             <div className="pointer-events-auto w-[34%] max-w-[150px]">
               <Joystick
-                label="Gas / broms"
+                label={t("joystick.throttle")}
                 axis="y"
                 compact
                 disabled={driveLocked}
@@ -270,7 +276,7 @@ function ControlStation() {
             </div>
             <div className="pointer-events-auto w-[34%] max-w-[150px]">
               <Joystick
-                label="Styrning"
+                label={t("joystick.steering")}
                 axis="x"
                 compact
                 disabled={driveLocked}
@@ -291,14 +297,14 @@ function ControlStation() {
 
       <div className="grid grid-cols-2 gap-2">
         <Joystick
-          label="Gas / broms"
+          label={t("joystick.throttle")}
           axis="y"
           disabled={driveLocked}
           onChange={setThrottleRaw}
           accent="primary"
         />
         <Joystick
-          label="Styrning"
+          label={t("joystick.steering")}
           axis="x"
           disabled={driveLocked}
           onChange={setSteeringRaw}
@@ -320,13 +326,13 @@ function ControlStation() {
         onEmergencyStop={() => {
           if (estop) {
             setEstop(false);
-            log("info", "Nödstopp återställt");
+            log("info", t("logmsg.estopReset"));
             sendAction("resume");
           } else {
             setEstop(true);
             setThrottleRaw(0);
             setSteeringRaw(0);
-            log("error", "NÖDSTOPP aktiverat");
+            log("error", t("logmsg.estopActivated"));
             sendAction("estop");
           }
         }}
@@ -367,7 +373,7 @@ function ControlStation() {
           update({ demoMode: true });
           // Startar om simuleringen även om demoläget redan var påslaget.
           reconnectNow();
-          log("info", "Växlade till demoläge");
+          log("info", t("logmsg.demoSwitch"));
         }}
 
       />

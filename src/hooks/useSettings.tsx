@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { Lang } from "@/lib/i18n";
 
 export type Settings = {
+  /** Gränssnittets språk. */
+  language: Lang;
   wsUrl: string;
   /** Delad hemlighet (RC_TOKEN på Pi:n). Tom = ingen autentisering. */
   wsToken: string;
@@ -17,6 +20,7 @@ export type Settings = {
 };
 
 export const defaultSettings: Settings = {
+  language: "en",
   wsUrl: "ws://192.168.1.146:81",
   wsToken: "",
   videoUrl: "/camera/stream",
@@ -28,6 +32,7 @@ export const defaultSettings: Settings = {
   invertThrottle: false,
   demoMode: true,
 };
+
 
 /** Styrservern kör på samma Pi som webbappen – härled adressen från sidan. */
 export function localWsUrl(): string {

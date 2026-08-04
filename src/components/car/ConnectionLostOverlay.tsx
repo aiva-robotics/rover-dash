@@ -1,5 +1,6 @@
 import { TriangleAlert, RefreshCw, Joystick as JoystickIcon, Terminal } from "lucide-react";
 import type { SocketError } from "@/hooks/useCarSocket";
+import { useI18n } from "@/hooks/useI18n";
 
 type Props = {
   visible: boolean;
@@ -18,14 +19,12 @@ export function ConnectionLostOverlay({
   onRetry,
   onDemoMode,
 }: Props) {
+  const { t } = useI18n();
   if (!visible) return null;
   const isEstop = reason === "estop";
 
-  const title = isEstop ? "Nödstopp aktivt" : (error?.title ?? "Anslutning bruten");
-  const body = isEstop
-    ? "Alla reglage är låsta. Bekräfta att banan är fri innan du återställer."
-    : (error?.message ??
-      "Kontakten med bilen har tappats. Bilen har gått till nödstopp och alla reglage är inaktiverade.");
+  const title = isEstop ? t("overlay.estop.title") : (error?.title ?? t("overlay.connection.title"));
+  const body = isEstop ? t("overlay.estop.body") : (error?.message ?? t("overlay.connection.body"));
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 px-6 backdrop-blur-md animate-fade-in">
@@ -41,7 +40,7 @@ export function ConnectionLostOverlay({
             {error.url && (
               <div className="min-w-0">
                 <div className="text-[0.6rem] uppercase tracking-[0.2em] text-muted-foreground">
-                  Adress
+                  {t("overlay.address")}
                 </div>
                 <div className="truncate font-mono text-xs">{error.url}</div>
               </div>
@@ -54,7 +53,7 @@ export function ConnectionLostOverlay({
             </div>
             {error.attempts > 0 && (
               <div className="text-[0.7rem] text-muted-foreground">
-                Återanslutningsförsök: {error.attempts}
+                {t("overlay.attempts", { n: error.attempts })}
               </div>
             )}
           </div>
@@ -66,7 +65,7 @@ export function ConnectionLostOverlay({
             onClick={onReset}
             className="mt-5 w-full rounded-xl border border-destructive/60 bg-destructive/30 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-destructive-foreground transition-colors hover:bg-destructive/50"
           >
-            Återställ
+            {t("overlay.reset")}
           </button>
         )}
         {!isEstop && (
@@ -78,7 +77,7 @@ export function ConnectionLostOverlay({
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/60 bg-destructive/30 py-3 text-sm font-semibold uppercase tracking-[0.15em] text-destructive-foreground transition-colors hover:bg-destructive/50"
               >
                 <RefreshCw className="h-4 w-4" />
-                Försök ansluta igen
+                <span className="min-w-0">{t("overlay.retry")}</span>
               </button>
             )}
             {onDemoMode && (
@@ -88,7 +87,7 @@ export function ConnectionLostOverlay({
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/50 bg-primary/15 py-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary transition-colors hover:bg-primary/25"
               >
                 <JoystickIcon className="h-4 w-4" />
-                Gå till demoläge
+                <span className="min-w-0">{t("overlay.demo")}</span>
               </button>
             )}
           </div>

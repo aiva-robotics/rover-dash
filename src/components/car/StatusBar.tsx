@@ -2,6 +2,7 @@ import { Battery, Wifi } from "lucide-react";
 import type { CarStatus, ConnectionState } from "@/lib/car-protocol";
 import { voltageToPercent } from "@/lib/car-protocol";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 import aivaLogo from "@/assets/aiva-robotics-logo.png.asset.json";
 
 
@@ -13,6 +14,7 @@ type Props = {
 };
 
 export function StatusBar({ status, connection, ping, sessionId }: Props) {
+  const { t } = useI18n();
   const online = connection === "connected";
   const driver = status.driver;
   const hasDriver = Boolean(driver?.session || driver?.label);
@@ -23,21 +25,21 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
   const wifi = status.rssi !== undefined ? status.rssi : undefined;
 
   const driverText = !online
-    ? "Frånkopplad"
+    ? t("status.driver.offline")
     : !hasDriver
-      ? "Ingen förare"
+      ? t("status.driver.none")
       : isMe
-        ? "Du styr"
-        : "Annan styr";
+        ? t("status.driver.me")
+        : t("status.driver.other");
 
   // Kortare etikett på små skärmar så att texten aldrig kapas.
   const driverTextShort = !online
-    ? "Offline"
+    ? t("status.driver.offlineShort")
     : !hasDriver
-      ? "Ingen"
+      ? t("status.driver.noneShort")
       : isMe
-        ? "Du"
-        : "Annan";
+        ? t("status.driver.meShort")
+        : t("status.driver.otherShort");
 
   return (
     <div className="glass-panel grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 overflow-hidden px-3 py-2.5">
@@ -55,7 +57,7 @@ export function StatusBar({ status, connection, ping, sessionId }: Props) {
               online ? "bg-primary shadow-[0_0_10px_var(--color-primary)]" : "bg-destructive",
             )}
           />
-          <span className="hidden sm:inline">{online ? "Ansluten" : "Frånkopplad"}</span>
+          <span className="hidden sm:inline">{online ? t("common.connected") : t("common.disconnected")}</span>
         </span>
 
         <span className="hidden shrink-0 items-center gap-1 font-mono tabular-nums sm:flex">
