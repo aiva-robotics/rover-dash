@@ -39,9 +39,11 @@ log = logging.getLogger("rc-car")
 try:
     import websockets
     from websockets.server import serve
+    from websockets.exceptions import ConnectionClosed
 except ImportError:  # pragma: no cover
     log.error("websockets saknas. Installera: sudo apt-get install -y python3-websockets")
     sys.exit(1)
+
 
 
 class CarState:
@@ -65,6 +67,9 @@ outputs = RCOutputs()
 active_client = None  # type: ignore[var-annotated]
 active_session = ""
 driver_info = {"session": "", "label": "", "since": None, "handover": None}
+# Skyddar check-and-set av aktiv förare mot samtidiga anslutningar.
+client_lock = asyncio.Lock()
+
 
 
 # --- Telemetriläsning -------------------------------------------------------
@@ -154,14 +159,18 @@ def _coerce_percent(value, default: float, label: str) -> float:
 
 def apply_command(throttle: float, steering: float) -> None:
     limit = clamp(config.MAX_THROTTLE, 0.0, 100.0)
-    state.throttle = clamp(_coerce_percent(throttle, 0.0, "throttle"), -limit, limit)
-    state.steering = clamp(_coerce_percent(steering, 0.0, "steering"), -100.0, 100.0)
     state.last_command = time.monotonic()
     state.failsafe = False
     if state.estop:
+        # Under nödstopp får inget kommando lagras eller nå utgångarna – annars
+        # rapporterar telemetrin gas som inte finns och ett resume kan rycka till.
+        state.reset_controls()
         outputs.neutral()
-    else:
-        outputs.apply(state.throttle, state.steering)
+        return
+    state.throttle = clamp(_coerce_percent(throttle, 0.0, "throttle"), -limit, limit)
+    state.steering = clamp(_coerce_percent(steering, 0.0, "steering"), -100.0, 100.0)
+    outputs.apply(state.throttle, state.steering)
+
 
 
 def take_photo() -> str | None:
@@ -244,9 +253,22 @@ async def telemetry_loop() -> None:
         if client is None:
             continue
         try:
-            await client.send(json.dumps(telemetry()))
-        except Exception as exc:
-            log.debug("Kunde inte skicka telemetri: %s", exc.__class__.__name__)
+            # Backpressure: en långsam klient får inte bromsa hela loopen.
+            # Hinner den inte ta emot inom ett intervall stänger vi anslutningen.
+            await asyncio.wait_for(client.send(json.dumps(telemetry())), timeout=max(0.5, interval * 2))
+        except ConnectionClosed:
+            log.debug("Telemetri: klienten är frånkopplad")
+        except asyncio.TimeoutError:
+            log.warning("Telemetri: klienten hinner inte ta emot – stänger anslutningen")
+            try:
+                await client.close(code=1013, reason="slow consumer")
+            except Exception:
+                log.debug("Kunde inte stänga långsam klient", exc_info=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Oväntat fel i telemetriloopen")
+
 
 
 def _request_path(websocket) -> str:
@@ -326,44 +348,50 @@ async def handler(websocket) -> None:
 
     session = _supplied_session(websocket)
 
-    if config.SINGLE_CLIENT and active_client is not None and active_client is not websocket:
-        # Samma flik/enhet som återansluter (t.ex. efter WiFi-glapp) är ingen
-        # övertagning – stäng den gamla, halvöppna anslutningen tyst.
-        same_session = bool(session) and session == active_session
-        if same_session or config.TAKEOVER:
-            old = active_client
-            active_client = None
-            if same_session:
-                log.info("Klient %s återansluter (samma session) – ersätter gammal anslutning", peer[0])
-            else:
-                log.warning("Ny klient %s tar över styrningen", peer[0])
-            try:
-                if not same_session:
-                    await old.send(
-                        json.dumps({"error": "taken_over", "message": "En annan klient tog över styrningen"})
-                    )
-                    await old.close(code=4001, reason="taken over")
+    # Check-and-set av aktiv förare måste vara atomärt: annars kan två klienter
+    # som ansluter samtidigt båda passera kontrollen och styra bilen parallellt.
+    async with client_lock:
+        if config.SINGLE_CLIENT and active_client is not None and active_client is not websocket:
+            # Samma flik/enhet som återansluter (t.ex. efter WiFi-glapp) är ingen
+            # övertagning – stäng den gamla, halvöppna anslutningen tyst.
+            same_session = bool(session) and session == active_session
+            if same_session or config.TAKEOVER:
+                old = active_client
+                active_client = None
+                if same_session:
+                    log.info("Klient %s återansluter (samma session) – ersätter gammal anslutning", peer[0])
                 else:
-                    await old.close(code=4005, reason="replaced")
-            except Exception:
-                pass
-        else:
-            log.warning("Avvisar klient %s – redan upptagen", peer[0])
-            await websocket.send(
-                json.dumps({"error": "busy", "message": "En annan klient styr redan bilen"})
-            )
-            await websocket.close(code=4002, reason="busy")
-            return
+                    log.warning("Ny klient %s tar över styrningen", peer[0])
+                try:
+                    if not same_session:
+                        await old.send(
+                            json.dumps({"error": "taken_over", "message": "En annan klient tog över styrningen"})
+                        )
+                        await old.close(code=4001, reason="taken over")
+                    else:
+                        await old.close(code=4005, reason="replaced")
+                except ConnectionClosed:
+                    pass
+                except Exception:
+                    log.exception("Fel vid stängning av tidigare anslutning")
+            else:
+                log.warning("Avvisar klient %s – redan upptagen", peer[0])
+                await websocket.send(
+                    json.dumps({"error": "busy", "message": "En annan klient styr redan bilen"})
+                )
+                await websocket.close(code=4002, reason="busy")
+                return
 
-    active_client = websocket
-    active_session = session
-    now_ms = int(time.time() * 1000)
-    previous = driver_info.get("session")
-    driver_info["session"] = session
-    driver_info["label"] = str(peer[0])
-    driver_info["since"] = now_ms
-    if previous and previous != session:
-        driver_info["handover"] = now_ms
+        active_client = websocket
+        active_session = session
+        now_ms = int(time.time() * 1000)
+        previous = driver_info.get("session")
+        driver_info["session"] = session
+        driver_info["label"] = str(peer[0])
+        driver_info["since"] = now_ms
+        if previous and previous != session:
+            driver_info["handover"] = now_ms
+
     state.last_command = time.monotonic()
     state.failsafe = False
     log.info("Klient ansluten: %s", peer[0])
@@ -400,14 +428,19 @@ async def handler(websocket) -> None:
             if "ping" in data:
                 try:
                     await websocket.send(json.dumps({"pong": data["ping"]}))
-                except Exception:
+                except ConnectionClosed:
                     break
 
             action = data.get("action")
             if isinstance(action, str):
                 await handle_action_async(action, data.get("value"), websocket)
-    except Exception as exc:  # websockets.ConnectionClosed m.m.
-        log.info("Klientfel/frånkoppling: %s", exc.__class__.__name__)
+    except ConnectionClosed as exc:
+        log.info("Klient frånkopplad (%s): kod=%s", exc.__class__.__name__, getattr(exc, "code", "?"))
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("Oväntat serverfel i klienthanteraren för %s", peer[0])
+
     finally:
         if active_client is websocket:
             active_client = None
