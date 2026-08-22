@@ -26,6 +26,7 @@ typedef struct
 
 void adc_task_init(ADC_HandleTypeDef *adc1, ADC_HandleTypeDef *adc2, TIM_HandleTypeDef *tim6, rover_state_t *state, rover_diag_t *diag);
 void adc_task(void);
+void adc_task_dma_full_callback(ADC_HandleTypeDef *hadc);
 uint16_t adc_get_filtered(adc_channel_t channel);
 
 #endif

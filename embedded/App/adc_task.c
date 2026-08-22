@@ -73,6 +73,14 @@ void adc_task(void)
 	}
 }
 
+void adc_task_dma_full_callback(ADC_HandleTypeDef *hadc)
+{
+	if ((hadc == adc1_handle) && (adc_diag != 0))
+	{
+		adc_diag->adc1_scan_count++;
+	}
+}
+
 uint16_t adc_get_filtered(adc_channel_t channel)
 {
 	return adc_filtered[channel];

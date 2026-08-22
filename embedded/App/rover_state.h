@@ -30,6 +30,8 @@ typedef struct
   uint32_t uart_type_errors;
   uint32_t uart_overruns;
 
+  uint32_t adc1_scan_count;
+
   uint32_t i2c_errors;
 
   uint32_t speed_captures;
