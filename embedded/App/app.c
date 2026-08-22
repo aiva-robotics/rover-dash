@@ -15,6 +15,7 @@ extern I2C_HandleTypeDef hi2c1;
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim4;
+extern TIM_HandleTypeDef htim6;
 extern UART_HandleTypeDef huart2;
 
 static rover_state_t rover_state;
@@ -33,7 +34,7 @@ static scheduler_task_t tasks[] =
 void app_init(void)
 {
   control_task_init(&htim1, &rover_state, &rover_diag);
-  adc_task_init(&hadc1, &hadc2, &rover_state, &rover_diag);
+  adc_task_init(&hadc1, &hadc2, &htim6, &rover_state, &rover_diag);
   uart_task_init(&huart2, &rover_state, &rover_diag);
   i2c_task_init(&hi2c1, &rover_diag);
   speed_task_init(&htim2, &rover_state, &rover_diag);

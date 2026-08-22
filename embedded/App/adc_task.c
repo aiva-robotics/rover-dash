@@ -1,116 +1,79 @@
 #include "adc_task.h"
 
-#define ADC_DMA_FRAME_COUNT 20u
-#define ADC_DMA_BUFFER_LENGTH (ADC_TASK_CHANNEL_COUNT * ADC_DMA_FRAME_COUNT)
 
 static ADC_HandleTypeDef *adc1_handle;
 static ADC_HandleTypeDef *adc2_handle;
+static TIM_HandleTypeDef *tim6_handle;
 static rover_state_t *adc_state;
 static rover_diag_t *adc_diag;
-static uint16_t adc_dma_buffer[ADC_DMA_BUFFER_LENGTH];
-static volatile uint8_t adc_half_ready;
-static volatile uint8_t adc_full_ready;
-static adc_values_t adc_values;
 
-static void accumulate_samples(uint32_t start, uint32_t end, uint32_t *sums, uint32_t *frames)
+static volatile uint16_t adc_dma[ADC_CHANNEL_COUNT];
+static uint16_t adc_raw[ADC_CHANNEL_COUNT];
+static uint16_t adc_filtered[ADC_CHANNEL_COUNT];
+
+void adc_task_init(ADC_HandleTypeDef *adc1, ADC_HandleTypeDef *adc2, TIM_HandleTypeDef *tim6, rover_state_t *state, rover_diag_t *diag)
 {
-  for (uint32_t index = start; index + ADC_TASK_CHANNEL_COUNT <= end; index += ADC_TASK_CHANNEL_COUNT)
-  {
-    for (uint32_t channel = 0u; channel < ADC_TASK_CHANNEL_COUNT; channel++)
-    {
-      sums[channel] += adc_dma_buffer[index + channel];
-    }
-    (*frames)++;
-  }
-}
+	adc1_handle = adc1;
+	adc2_handle = adc2;
+	tim6_handle = tim6;
+	adc_state = state;
+	adc_diag = diag;
 
-void adc_task_init(ADC_HandleTypeDef *adc1, ADC_HandleTypeDef *adc2, rover_state_t *state, rover_diag_t *diag)
-{
-  adc1_handle = adc1;
-  adc2_handle = adc2;
-  adc_state = state;
-  adc_diag = diag;
+	for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++)
+	{
+		adc_raw[i] = adc_dma[i];
+		adc_filtered[i] = adc_dma[i];
+	}
 
-  if (adc1_handle != 0)
-  {
-    (void)HAL_ADC_Start_DMA(adc1_handle, (uint32_t *)adc_dma_buffer, ADC_DMA_BUFFER_LENGTH);
-  }
+	if (adc1_handle != 0)
+	{
+		if (HAL_ADC_Start_DMA(adc1_handle, (uint32_t *)adc_dma, ADC1_CHANNEL_COUNT) == HAL_OK)
+		{
+			if (tim6_handle != 0)
+			{
+				(void)HAL_TIM_Base_Start(tim6_handle);
+			}
+		}
+	}
 
-  if (adc2_handle != 0)
-  {
-    (void)HAL_ADC_Start(adc2_handle);
-  }
-}
-
-void adc_task_dma_half_callback(ADC_HandleTypeDef *hadc)
-{
-  if (hadc == adc1_handle)
-  {
-    adc_half_ready = 1u;
-    if (adc_diag != 0)
-    {
-      adc_diag->adc_half_cycles++;
-    }
-  }
-}
-
-void adc_task_dma_full_callback(ADC_HandleTypeDef *hadc)
-{
-  if (hadc == adc1_handle)
-  {
-    adc_full_ready = 1u;
-    if (adc_diag != 0)
-    {
-      adc_diag->adc_dma_cycles++;
-    }
-  }
+	if (adc2_handle != 0)
+	{
+		(void)HAL_ADC_Start(adc2_handle);
+	}
 }
 
 void adc_task(void)
 {
-  uint32_t sums[ADC_TASK_CHANNEL_COUNT] = {0u};
-  uint32_t frames = 0u;
 
-  if (adc_half_ready != 0u)
-  {
-    adc_half_ready = 0u;
-    accumulate_samples(0u, ADC_DMA_BUFFER_LENGTH / 2u, sums, &frames);
-  }
+	// Handle ADC2 unique but still use the rest of the filtering
+	// ADC1 is read using DMA
+	if (adc2_handle != 0)
+	{
+		if (HAL_ADC_PollForConversion(adc2_handle, 0u) == HAL_OK)
+		{
+			adc_dma[ADC_CH_4] = HAL_ADC_GetValue(adc2_handle);
+		}
+	}
 
-  if (adc_full_ready != 0u)
-  {
-    adc_full_ready = 0u;
-    accumulate_samples(ADC_DMA_BUFFER_LENGTH / 2u, ADC_DMA_BUFFER_LENGTH, sums, &frames);
-  }
+	for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++)
+	{
+		adc_raw[i] = adc_dma[i];
 
-  if (frames > 0u)
-  {
-    for (uint32_t channel = 0u; channel < ADC_TASK_CHANNEL_COUNT; channel++)
-    {
-      adc_values.analog[channel] = (uint16_t)(sums[channel] / frames);
-    }
-  }
+		int32_t diff =
+				(int32_t)adc_raw[i] -
+				(int32_t)adc_filtered[i];
 
-  if (adc2_handle != 0)
-  {
-    if (HAL_ADC_PollForConversion(adc2_handle, 0u) == HAL_OK)
-    {
-      adc_values.motor_temperature = (float)HAL_ADC_GetValue(adc2_handle);
-    }
-  }
+		adc_filtered[i] += diff / 8;
+	}
 
-  adc_values.battery_voltage = (float)adc_values.analog[0];
-  adc_values.current = (float)adc_values.analog[1];
 
-  if (adc_state != 0)
-  {
-    adc_state->battery_voltage = adc_values.battery_voltage;
-    adc_state->battery_current = adc_values.current;
-    adc_state->motor_temperature = adc_values.motor_temperature;
-  }
+	if (adc_state != 0)
+	{
+
+	}
 }
 
-const adc_values_t *adc_task_get_values(void)
+uint16_t adc_get_filtered(adc_channel_t channel)
 {
-  return &adc_values;
+	return adc_filtered[channel];
 }
