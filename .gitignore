@@ -39,3 +39,4 @@ __pycache__/
 *.dip~
 *.dch~
 /.metadata/
+embedded/embedded Debug.launch

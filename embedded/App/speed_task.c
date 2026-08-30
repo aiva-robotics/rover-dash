@@ -2,6 +2,7 @@
 
 #define SPEED_CAPTURE_CHANNEL TIM_CHANNEL_4
 #define SPEED_TIMEOUT_MS 500u
+#define SPEED_TIMER_TICK_HZ 1000000.0f
 
 static TIM_HandleTypeDef *speed_timer;
 static rover_state_t *speed_state;
@@ -9,7 +10,7 @@ static rover_diag_t *speed_diag;
 static volatile uint32_t last_capture_ticks;
 static volatile uint32_t latest_period_ticks;
 static volatile uint8_t period_ready;
-static uint32_t last_capture_ms;
+static volatile uint32_t last_capture_ms;
 
 void speed_task_init(TIM_HandleTypeDef *timer, rover_state_t *state, rover_diag_t *diag)
 {
@@ -45,12 +46,14 @@ void speed_task(void)
 {
   if (period_ready != 0u)
   {
+    HAL_NVIC_DisableIRQ(TIM2_IRQn);
     uint32_t period_ticks = latest_period_ticks;
     period_ready = 0u;
+    HAL_NVIC_EnableIRQ(TIM2_IRQn);
 
     if ((speed_state != 0) && (period_ticks > 0u))
     {
-      speed_state->vehicle_speed = 1000000.0f / (float)period_ticks;
+      speed_state->vehicle_speed = SPEED_TIMER_TICK_HZ / (float)period_ticks;
     }
   }
 

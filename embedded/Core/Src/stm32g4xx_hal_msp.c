@@ -24,10 +24,10 @@
 
 /* USER CODE END Includes */
 extern DMA_HandleTypeDef hdma_adc1;
-/* USER CODE BEGIN EV */
+
 extern DMA_HandleTypeDef hdma_usart2_rx;
+
 extern DMA_HandleTypeDef hdma_usart2_tx;
-/* USER CODE END EV */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
@@ -365,6 +365,9 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base)
     GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
     HAL_GPIO_Init(SPEED_SENSOR_GPIO_Port, &GPIO_InitStruct);
 
+    /* TIM2 interrupt Init */
+    HAL_NVIC_SetPriority(TIM2_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(TIM2_IRQn);
     /* USER CODE BEGIN TIM2_MspInit 1 */
 
     /* USER CODE END TIM2_MspInit 1 */
@@ -409,19 +412,19 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim)
     PA10     ------> TIM1_CH3
     PA11     ------> TIM1_CH4
     */
-    GPIO_InitStruct.Pin = SERVO_3_Pin|SERVO_2_Pin|SERVO_1_Pin;
+    GPIO_InitStruct.Pin = RC_OUTPUT_3_Pin|RC_OUTPUT_2_Pin|RC_OUTPUT_1_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF6_TIM1;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = SERVO_0_Pin;
+    GPIO_InitStruct.Pin = RC_OUTPUT_0_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF11_TIM1;
-    HAL_GPIO_Init(SERVO_0_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(RC_OUTPUT_0_GPIO_Port, &GPIO_InitStruct);
 
     /* USER CODE BEGIN TIM1_MspPostInit 1 */
 
@@ -482,6 +485,8 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* htim_base)
     */
     HAL_GPIO_DeInit(SPEED_SENSOR_GPIO_Port, SPEED_SENSOR_Pin);
 
+    /* TIM2 interrupt DeInit */
+    HAL_NVIC_DisableIRQ(TIM2_IRQn);
     /* USER CODE BEGIN TIM2_MspDeInit 1 */
 
     /* USER CODE END TIM2_MspDeInit 1 */
@@ -551,7 +556,8 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    /* USER CODE BEGIN USART2_MspInit 1 */
+    /* USART2 DMA Init */
+    /* USART2_RX Init */
     hdma_usart2_rx.Instance = DMA1_Channel2;
     hdma_usart2_rx.Init.Request = DMA_REQUEST_USART2_RX;
     hdma_usart2_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
@@ -560,14 +566,15 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     hdma_usart2_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
     hdma_usart2_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
     hdma_usart2_rx.Init.Mode = DMA_NORMAL;
-    hdma_usart2_rx.Init.Priority = DMA_PRIORITY_HIGH;
+    hdma_usart2_rx.Init.Priority = DMA_PRIORITY_LOW;
     if (HAL_DMA_Init(&hdma_usart2_rx) != HAL_OK)
     {
       Error_Handler();
     }
 
-    __HAL_LINKDMA(huart, hdmarx, hdma_usart2_rx);
+    __HAL_LINKDMA(huart,hdmarx,hdma_usart2_rx);
 
+    /* USART2_TX Init */
     hdma_usart2_tx.Instance = DMA1_Channel3;
     hdma_usart2_tx.Init.Request = DMA_REQUEST_USART2_TX;
     hdma_usart2_tx.Init.Direction = DMA_MEMORY_TO_PERIPH;
@@ -582,7 +589,12 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
       Error_Handler();
     }
 
-    __HAL_LINKDMA(huart, hdmatx, hdma_usart2_tx);
+    __HAL_LINKDMA(huart,hdmatx,hdma_usart2_tx);
+
+    /* USART2 interrupt Init */
+    HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(USART2_IRQn);
+    /* USER CODE BEGIN USART2_MspInit 1 */
 
     /* USER CODE END USART2_MspInit 1 */
 
@@ -612,9 +624,13 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
     */
     HAL_GPIO_DeInit(GPIOB, UART_TX_Pin|UART_RX_Pin);
 
-    /* USER CODE BEGIN USART2_MspDeInit 1 */
+    /* USART2 DMA DeInit */
     HAL_DMA_DeInit(huart->hdmarx);
     HAL_DMA_DeInit(huart->hdmatx);
+
+    /* USART2 interrupt DeInit */
+    HAL_NVIC_DisableIRQ(USART2_IRQn);
+    /* USER CODE BEGIN USART2_MspDeInit 1 */
 
     /* USER CODE END USART2_MspDeInit 1 */
   }

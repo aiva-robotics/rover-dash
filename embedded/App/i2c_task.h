@@ -24,7 +24,7 @@ typedef struct
   uint16_t length;
 } i2c_transaction_t;
 
-void i2c_task_init(I2C_HandleTypeDef *i2c, rover_diag_t *diag);
+void i2c_task_init(I2C_HandleTypeDef *i2c, rover_state_t *state, rover_diag_t *diag);
 bool i2c_task_submit(const i2c_transaction_t *transaction);
 void i2c_task(void);
 

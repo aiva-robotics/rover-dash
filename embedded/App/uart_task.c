@@ -14,7 +14,7 @@ static rover_diag_t *uart_diag;
 static uint8_t uart_dma_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
 static uint8_t uart_rx_ring[UART_RX_RING_SIZE];
 static volatile uint16_t uart_rx_head;
-static uint16_t uart_rx_tail;
+static volatile uint16_t uart_rx_tail;
 static volatile bool uart_tx_busy;
 
 static uint16_t ring_next(uint16_t index)
@@ -54,7 +54,7 @@ static void handle_packet(const protocol_packet_t *packet)
 {
   if (packet->type == PROTOCOL_MSG_CONTROL)
   {
-    if (packet->payload_length < 4u)
+    if (packet->payload_length != PROTOCOL_CONTROL_PAYLOAD_SIZE)
     {
       if (uart_diag != 0)
       {
@@ -63,9 +63,13 @@ static void handle_packet(const protocol_packet_t *packet)
       return;
     }
 
-    int16_t steering = (int16_t)read_u16_le(&packet->payload[0]);
-    int16_t throttle = (int16_t)read_u16_le(&packet->payload[2]);
-    control_task_apply_command(steering, throttle, HAL_GetTick());
+    int16_t rc_command[PROTOCOL_CONTROL_RC_CHANNELS];
+    for (uint8_t output = 0u; output < PROTOCOL_CONTROL_RC_CHANNELS; output++)
+    {
+      rc_command[output] = (int16_t)read_u16_le(&packet->payload[output * 2u]);
+    }
+    uint16_t buzzer_frequency_hz = read_u16_le(&packet->payload[PROTOCOL_CONTROL_BUZZER_FREQUENCY_INDEX]);
+    control_task_apply_command(rc_command, packet->payload[PROTOCOL_CONTROL_OUTPUT_MASK_INDEX], buzzer_frequency_hz, HAL_GetTick());
     if (uart_state != 0)
     {
       uart_state->rpi_connected = true;

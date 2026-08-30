@@ -69,7 +69,11 @@ void adc_task(void)
 
 	if (adc_state != 0)
 	{
-
+		for (uint8_t i = 0u; i < ROVER_ANALOG_INPUT_COUNT; i++)
+		{
+			adc_state->analog_input_raw[i] = adc_filtered[i];
+		}
+		adc_state->ntc_temperature_raw = adc_filtered[ADC_CH_4];
 	}
 }
 
