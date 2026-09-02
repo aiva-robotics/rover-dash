@@ -364,48 +364,13 @@ systemctl status pigpiod          # måste vara aktiv
 
 ---
 
-## Statusskärm: 0.91" I2C OLED med IP-adress
+## Statusskärm
 
-En liten SSD1306-skärm (128x32) visar Pi:ns hostname, IP-adress och status för
-webb-, kamera- och styrtjänsten — praktiskt när Pi:n körs utan bildskärm.
-
-### Koppling
-
-| OLED | Pi |
-| --- | --- |
-| VCC | 3.3 V (pin 1) |
-| GND | GND (pin 6) |
-| SDA | GPIO 2 (pin 3) |
-| SCL | GPIO 3 (pin 5) |
-
-### Installation
-
-```bash
-bash scripts/pi-oled-setup.sh
-```
-
-Skriptet aktiverar I2C, installerar `python3-luma.oled` + `i2c-tools`,
-kontrollerar att skärmen svarar och installerar tjänsten `pi-oled`.
-
-Skärmen visar:
-
-```
-raspberrypi
-192.168.1.42
-W+ C+ S+      (webb / kamera / styrserver)
-```
-
-### Felsökning
-
-```bash
-sudo i2cdetect -y 1        # skärmen ska synas på 0x3C (ibland 0x3D)
-journalctl -u pi-oled -f
-```
-
-Hittas skärmen på `0x3D`? Ändra `OLED_ADDRESS` med
-`sudo systemctl edit --full pi-oled` och starta om tjänsten.
+Statusskärmen (IP-adress m.m.) hanteras numera av STM32-kortet på Raspberry
+Pi-hatten, inte av någon tjänst på Pi:n.
 
 ---
+
 
 ## Uppdatera allt med ett kommando
 
