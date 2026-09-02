@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""WebSocket-server för RC-bilen på Raspberry Pi.
+"""WebSocket-to-STM32 UART bridge for the RC car on Raspberry Pi.
 
 Protokoll (matchar webbappens useCarSocket):
   in : {"throttle": -100..100, "steering": -100..100}
   in : {"ping": <ms-timestamp>}            -> ut: {"pong": <samma>}
   in : {"action": "estop"|"resume"|"headlights"|"horn"|"photo", "value": ...}
+  in : {"rc": [..4 values -1000..1000], "digital": 0..15, "buzzer": 0..65535}
+  in : {"action": "oled", "value": {"base64"|"hex"|"framebuffer": <512 bytes>}}
   ut : {"speed":..,"rssi":..,"temperature":..,"heading":..,"headlights":..,
-        "recording":..,"estop":..,"armed":..}
+        "recording":..,"estop":..,"armed":..,"stm32": {...}}
 
 Kör:  python3 rc-car-server.py
 """
@@ -23,12 +25,13 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from urllib.parse import parse_qs, urlparse
 
 import config
-from hardware import RCOutputs, clamp
+from hardware import clamp
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +47,353 @@ except ImportError:  # pragma: no cover
     log.error("websockets saknas. Installera: sudo apt-get install -y python3-websockets")
     sys.exit(1)
 
+try:
+    import serial  # type: ignore
+except ImportError:  # pragma: no cover
+    serial = None  # type: ignore[assignment]
+
+
+MSG_CONTROL = 0x01
+MSG_RPI_SHUTDOWN = 0x02
+MSG_DISPLAY_DATA = 0x03
+MSG_DISPLAY_UPDATE = 0x04
+MSG_STATUS = 0x80
+
+MAX_PAYLOAD_SIZE = 64
+CONTROL_PAYLOAD_SIZE = 11
+STATUS_PAYLOAD_SIZE = 56
+DISPLAY_FRAMEBUFFER_SIZE = 512
+DISPLAY_CHUNK_DATA_SIZE = 63
+DISPLAY_CHUNK_COUNT = 9
+
+
+def crc16_ccitt(data: bytes) -> int:
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF
+            else:
+                crc = (crc << 1) & 0xFFFF
+    return crc
+
+
+def cobs_encode(data: bytes) -> bytes:
+    encoded = bytearray([0])
+    code_index = 0
+    code = 1
+
+    for byte in data:
+        if byte == 0:
+            encoded[code_index] = code
+            code_index = len(encoded)
+            encoded.append(0)
+            code = 1
+        else:
+            encoded.append(byte)
+            code += 1
+            if code == 0xFF:
+                encoded[code_index] = code
+                code_index = len(encoded)
+                encoded.append(0)
+                code = 1
+
+    encoded[code_index] = code
+    return bytes(encoded)
+
+
+def cobs_decode(data: bytes) -> bytes:
+    decoded = bytearray()
+    index = 0
+
+    while index < len(data):
+        code = data[index]
+        index += 1
+        if code == 0:
+            raise ValueError("zero byte inside COBS frame")
+
+        end = index + code - 1
+        if end > len(data):
+            raise ValueError("COBS code byte overruns frame")
+
+        decoded.extend(data[index:end])
+        index = end
+        if code != 0xFF and index < len(data):
+            decoded.append(0)
+
+    return bytes(decoded)
+
+
+def encode_packet(msg_type: int, payload: bytes = b"") -> bytes:
+    if len(payload) > MAX_PAYLOAD_SIZE:
+        raise ValueError(f"payload too large: {len(payload)} > {MAX_PAYLOAD_SIZE}")
+
+    packet = bytes([msg_type, len(payload)]) + payload
+    packet += crc16_ccitt(packet).to_bytes(2, "little")
+    return cobs_encode(packet) + b"\x00"
+
+
+def decode_packet(frame: bytes) -> tuple[int, bytes]:
+    decoded = cobs_decode(frame)
+    if len(decoded) < 4:
+        raise ValueError("decoded packet too short")
+
+    msg_type = decoded[0]
+    payload_length = decoded[1]
+    if payload_length > MAX_PAYLOAD_SIZE or len(decoded) != payload_length + 4:
+        raise ValueError("invalid decoded packet length")
+
+    received_crc = int.from_bytes(decoded[-2:], "little")
+    calculated_crc = crc16_ccitt(decoded[:-2])
+    if received_crc != calculated_crc:
+        raise ValueError(f"CRC mismatch rx=0x{received_crc:04x} calc=0x{calculated_crc:04x}")
+
+    return msg_type, decoded[2:-2]
+
+
+def parse_status_payload(payload: bytes) -> dict:
+    if len(payload) != STATUS_PAYLOAD_SIZE:
+        raise ValueError(f"wrong STATUS length: {len(payload)}")
+
+    speed_hz_x100 = int.from_bytes(payload[47:51], "little")
+    bus_mv = int.from_bytes(payload[51:53], "little")
+    current_ma = int.from_bytes(payload[53:55], "little", signed=True)
+    return {
+        "stm32": {
+            "uptimeMs": int.from_bytes(payload[0:4], "little"),
+            "rc": [
+                int.from_bytes(payload[4:6], "little", signed=True),
+                int.from_bytes(payload[6:8], "little", signed=True),
+                int.from_bytes(payload[8:10], "little", signed=True),
+                int.from_bytes(payload[10:12], "little", signed=True),
+            ],
+            "digitalMask": payload[12],
+            "buzzerHz": int.from_bytes(payload[14:16], "little"),
+            "uartRxFrames": int.from_bytes(payload[16:20], "little"),
+            "uartCrcErrors": int.from_bytes(payload[20:24], "little"),
+            "failsafeCount": int.from_bytes(payload[24:28], "little"),
+            "rpiConnected": bool(int.from_bytes(payload[28:30], "little")),
+            "rpiPowerEnabled": bool(payload[30]),
+            "rpiPoweroffOk": bool(payload[31]),
+            "rpiShutdownRequested": bool(payload[32]),
+            "rpiStatus": payload[33],
+            "analogRaw": [
+                int.from_bytes(payload[34:36], "little"),
+                int.from_bytes(payload[36:38], "little"),
+                int.from_bytes(payload[38:40], "little"),
+                int.from_bytes(payload[40:42], "little"),
+            ],
+            "ntcRaw": int.from_bytes(payload[42:44], "little"),
+            "tmp75C": int.from_bytes(payload[44:46], "little", signed=True) / 100.0,
+            "tmp75Valid": bool(payload[46]),
+            "speedHz": speed_hz_x100 / 100.0,
+            "ina226VoltageV": bus_mv / 1000.0,
+            "ina226CurrentA": current_ma / 1000.0,
+            "ina226Valid": bool(payload[55]),
+        },
+        "battery": bus_mv / 1000.0 if bus_mv else None,
+        "speed": speed_hz_x100 / 100.0,
+        "temperature": int.from_bytes(payload[44:46], "little", signed=True) / 100.0,
+        "failsafe": bool(payload[13]),
+    }
+
+
+def percent_to_stm32_command(value: float) -> int:
+    return int(round(clamp(value, -100.0, 100.0) * 10.0))
+
+
+def _int_auto(value, default: int = 0) -> int:
+    try:
+        if isinstance(value, str):
+            return int(value, 0)
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _decode_bytes_value(value) -> bytes:
+    if isinstance(value, list):
+        return bytes(int(v) & 0xFF for v in value)
+    if isinstance(value, str):
+        compact = value.strip().replace(" ", "")
+        try:
+            return bytes.fromhex(compact)
+        except ValueError:
+            return base64.b64decode(value)
+    if isinstance(value, dict):
+        if "framebuffer" in value:
+            return _decode_bytes_value(value["framebuffer"])
+        if "hex" in value:
+            return bytes.fromhex(str(value["hex"]).strip().replace(" ", ""))
+        if "base64" in value:
+            return base64.b64decode(str(value["base64"]))
+    raise ValueError("expected framebuffer as byte list, hex string, or base64 string")
+
+
+class STM32Bridge:
+    """STM32 UART protocol bridge with the same surface as the old RCOutputs."""
+
+    def __init__(self) -> None:
+        self.simulated = config.SIMULATE
+        self.ser = None
+        self.lock = threading.Lock()
+        self.armed = False
+        self.rc = [0, 0, 0, 0]
+        self.digital_mask = 0
+        self.buzzer_hz = 0
+        self.latest_status: dict = {}
+        self.shutdown_requested = False
+        self.rx_buffer = bytearray()
+        self.last_steering_us = config.STEERING_MID_US
+        self.last_esc_us = config.ESC_MID_US
+
+    def connect(self) -> None:
+        if self.simulated:
+            log.warning("Kör i SIMULERAT STM32-läge – ingen UART öppnas")
+            return
+        if serial is None:  # pragma: no cover
+            raise RuntimeError("pyserial saknas. Installera med: sudo apt-get install -y python3-serial")
+        self.ser = serial.Serial(
+            config.STM32_UART_PORT,
+            config.STM32_UART_BAUD,
+            timeout=0,
+            write_timeout=config.STM32_WRITE_TIMEOUT,
+        )
+        log.info("STM32 UART öppen: %s @ %s baud", config.STM32_UART_PORT, config.STM32_UART_BAUD)
+
+    def arm(self) -> None:
+        self.neutral()
+        log.info("Armerar STM32 bridge (%.1f s neutral)...", config.ARM_SECONDS)
+        time.sleep(config.ARM_SECONDS)
+        self.armed = True
+        log.info("STM32 bridge armerad")
+
+    def close(self) -> None:
+        try:
+            self.accessories_off()
+            self.neutral()
+            if self.ser is not None:
+                self.ser.close()
+        finally:
+            self.ser = None
+            self.armed = False
+
+    def _write_frame(self, frame: bytes) -> None:
+        if self.simulated:
+            log.debug("SIM STM32 TX: %s", frame.hex(" "))
+            return
+        if self.ser is None:
+            return
+        with self.lock:
+            self.ser.write(frame)
+            self.ser.flush()
+
+    def _send_control(self) -> None:
+        payload = bytearray()
+        for value in self.rc:
+            payload += int(clamp(value, -1000, 1000)).to_bytes(2, "little", signed=True)
+        payload.append(self.digital_mask & 0x0F)
+        payload += int(clamp(self.buzzer_hz, 0, 65535)).to_bytes(2, "little")
+        if len(payload) != CONTROL_PAYLOAD_SIZE:
+            raise RuntimeError("internal CONTROL payload size mismatch")
+        self._write_frame(encode_packet(MSG_CONTROL, bytes(payload)))
+
+    def apply(self, throttle: float, steering: float) -> None:
+        if abs(throttle) < config.ESC_DEADBAND:
+            throttle = 0.0
+        rc = [0, 0, 0, 0]
+        if 0 <= config.STM32_STEERING_RC_OUTPUT < len(rc):
+            rc[config.STM32_STEERING_RC_OUTPUT] = percent_to_stm32_command(steering)
+        if 0 <= config.STM32_THROTTLE_RC_OUTPUT < len(rc):
+            rc[config.STM32_THROTTLE_RC_OUTPUT] = percent_to_stm32_command(throttle)
+        self.rc = rc
+        steering_command = self.rc[config.STM32_STEERING_RC_OUTPUT] if 0 <= config.STM32_STEERING_RC_OUTPUT < len(self.rc) else 0
+        throttle_command = self.rc[config.STM32_THROTTLE_RC_OUTPUT] if 0 <= config.STM32_THROTTLE_RC_OUTPUT < len(self.rc) else 0
+        self.last_steering_us = config.STEERING_MID_US + steering_command // 2
+        self.last_esc_us = config.ESC_MID_US + throttle_command // 2
+        self._send_control()
+
+    def apply_board_control(self, rc=None, digital=None, buzzer=None) -> None:
+        if isinstance(rc, list) and len(rc) == 4:
+            self.rc = [int(clamp(float(value), -1000, 1000)) for value in rc]
+        if digital is not None:
+            self.digital_mask = _int_auto(digital) & 0x0F
+        if buzzer is not None:
+            self.buzzer_hz = int(clamp(float(_int_auto(buzzer)), 0, 65535))
+        self._send_control()
+
+    def neutral(self) -> None:
+        self.rc = [0, 0, 0, 0]
+        self.last_steering_us = config.STEERING_MID_US
+        self.last_esc_us = config.ESC_MID_US
+        self._send_control()
+
+    def _set_digital_bit(self, bit: int, enabled: bool) -> None:
+        if not 0 <= bit <= 3:
+            return
+        if enabled:
+            self.digital_mask |= 1 << bit
+        else:
+            self.digital_mask &= ~(1 << bit)
+        self._send_control()
+
+    def set_lights(self, on: bool) -> None:
+        self._set_digital_bit(config.STM32_LIGHTS_OUTPUT_BIT, on)
+        log.info("STM32 digital bit %s -> %s", config.STM32_LIGHTS_OUTPUT_BIT, on)
+
+    def horn(self, seconds: float | None = None) -> None:
+        duration = config.HORN_SECONDS if seconds is None else float(seconds)
+        self.buzzer_hz = config.STM32_HORN_BUZZER_HZ
+        self._send_control()
+        time.sleep(max(0.05, min(3.0, duration)))
+        self.buzzer_hz = 0
+        self._send_control()
+
+    def accessories_off(self) -> None:
+        self.digital_mask = 0
+        self.buzzer_hz = 0
+        self._send_control()
+
+    def fail_safe(self) -> None:
+        self.neutral()
+
+    def send_oled_framebuffer(self, framebuffer: bytes, chunk_delay: float = 0.0) -> None:
+        if len(framebuffer) != DISPLAY_FRAMEBUFFER_SIZE:
+            raise ValueError(f"OLED framebuffer must be {DISPLAY_FRAMEBUFFER_SIZE} bytes")
+        for chunk in range(DISPLAY_CHUNK_COUNT):
+            offset = chunk * DISPLAY_CHUNK_DATA_SIZE
+            data = framebuffer[offset : offset + DISPLAY_CHUNK_DATA_SIZE]
+            self._write_frame(encode_packet(MSG_DISPLAY_DATA, bytes([chunk]) + data))
+            if chunk_delay > 0:
+                time.sleep(chunk_delay)
+        self._write_frame(encode_packet(MSG_DISPLAY_UPDATE))
+
+    def read_available(self) -> list[tuple[int, bytes]]:
+        if self.simulated or self.ser is None:
+            return []
+        data = self.ser.read(4096)
+        if not data:
+            return []
+        packets: list[tuple[int, bytes]] = []
+        self.rx_buffer.extend(data)
+        while True:
+            try:
+                delimiter = self.rx_buffer.index(0)
+            except ValueError:
+                break
+            frame = bytes(self.rx_buffer[:delimiter])
+            del self.rx_buffer[: delimiter + 1]
+            if not frame:
+                continue
+            try:
+                packets.append(decode_packet(frame))
+            except ValueError as exc:
+                log.warning("STM32 RX decode error: %s raw=%s", exc, frame.hex(" "))
+        return packets
+
+    # alias used by older tests/code
+    fail_safe = fail_safe
 
 
 class CarState:
@@ -63,7 +413,7 @@ class CarState:
 
 
 state = CarState()
-outputs = RCOutputs()
+outputs = STM32Bridge()
 active_client = None  # type: ignore[var-annotated]
 active_session = ""
 driver_info = {"session": "", "label": "", "since": None, "handover": None}
@@ -138,6 +488,8 @@ def telemetry() -> dict:
         "failsafe": state.failsafe,
     }
     payload["driver"] = dict(driver_info)
+    if outputs.latest_status:
+        payload.update(outputs.latest_status)
     if _cached_temp is not None:
         payload["temperature"] = _cached_temp
     if _cached_rssi is not None:
@@ -195,6 +547,21 @@ async def handle_action_async(action: str, value, websocket) -> None:
     loop = asyncio.get_running_loop()
     if action == "horn":
         await loop.run_in_executor(None, outputs.horn, None)
+        return
+    if action in ("oled", "display", "display_update"):
+        try:
+            framebuffer = _decode_bytes_value(value)
+            chunk_delay = 0.0
+            if isinstance(value, dict):
+                chunk_delay = float(value.get("chunkDelay", 0.0) or 0.0)
+            await loop.run_in_executor(None, outputs.send_oled_framebuffer, framebuffer, chunk_delay)
+            await websocket.send(json.dumps({"display": {"ok": True}}))
+        except Exception as exc:
+            log.warning("Kunde inte skicka OLED-framebuffer: %s", exc)
+            try:
+                await websocket.send(json.dumps({"display": {"ok": False, "error": str(exc)}}))
+            except Exception:
+                pass
         return
     if action == "photo":
         path = await loop.run_in_executor(None, take_photo)
@@ -268,6 +635,34 @@ async def telemetry_loop() -> None:
             raise
         except Exception:
             log.exception("Oväntat fel i telemetriloopen")
+
+
+async def stm32_rx_loop() -> None:
+    """Reads STM32 UART packets without blocking the WebSocket event loop."""
+    loop = asyncio.get_running_loop()
+    while True:
+        try:
+            packets = await loop.run_in_executor(None, outputs.read_available)
+            for msg_type, payload in packets:
+                if msg_type == MSG_STATUS:
+                    outputs.latest_status = parse_status_payload(payload)
+                elif msg_type == MSG_RPI_SHUTDOWN:
+                    outputs.shutdown_requested = True
+                    log.warning("STM32 begär Raspberry Pi shutdown")
+                    client = active_client
+                    if client is not None:
+                        try:
+                            await client.send(json.dumps({"shutdownRequested": True}))
+                        except Exception:
+                            pass
+                else:
+                    log.debug("STM32 RX type=0x%02x payload=%s", msg_type, payload.hex(" "))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Oväntat fel i STM32 UART-loopen")
+            await asyncio.sleep(1.0)
+        await asyncio.sleep(0.002)
 
 
 
@@ -425,6 +820,9 @@ async def handler(websocket) -> None:
             if "throttle" in data or "steering" in data:
                 apply_command(data.get("throttle", 0), data.get("steering", 0))
 
+            if "rc" in data or "digital" in data or "buzzer" in data:
+                outputs.apply_board_control(data.get("rc"), data.get("digital"), data.get("buzzer"))
+
             if "ping" in data:
                 try:
                     await websocket.send(json.dumps({"pong": data["ping"]}))
@@ -483,10 +881,12 @@ async def main() -> None:
         watch = asyncio.create_task(watchdog())
         tele = asyncio.create_task(telemetry_loop())
         stats = asyncio.create_task(system_stats_loop())
+        stm32 = asyncio.create_task(stm32_rx_loop())
         await stop.wait()
         watch.cancel()
         tele.cancel()
         stats.cancel()
+        stm32.cancel()
 
     log.info("Stänger av – neutral utgång")
     outputs.close()

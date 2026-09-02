@@ -91,5 +91,16 @@ WIFI_INTERFACE = os.environ.get("RC_WIFI_IF", "wlan0")
 # Grov km/h-uppskattning: throttle-procent * denna faktor
 SPEED_FACTOR = _float("RC_SPEED_FACTOR", 0.32)
 
+# --- STM32 UART bridge -----------------------------------------------------
+STM32_UART_PORT = os.environ.get("RC_STM32_UART_PORT", "/dev/serial0")
+STM32_UART_BAUD = _int("RC_STM32_UART_BAUD", 115200)
+STM32_WRITE_TIMEOUT = _float("RC_STM32_WRITE_TIMEOUT", 0.2)
+
+# Legacy webapp mapping: steering/throttle become generic STM32 RC outputs.
+STM32_STEERING_RC_OUTPUT = _int("RC_STM32_STEERING_RC_OUTPUT", 0)
+STM32_THROTTLE_RC_OUTPUT = _int("RC_STM32_THROTTLE_RC_OUTPUT", 1)
+STM32_LIGHTS_OUTPUT_BIT = _int("RC_STM32_LIGHTS_OUTPUT_BIT", 0)
+STM32_HORN_BUZZER_HZ = _int("RC_STM32_HORN_BUZZER_HZ", 1200)
+
 # Simulera hårdvara (för test på maskin utan pigpio)
 SIMULATE = _bool("RC_SIMULATE", False)

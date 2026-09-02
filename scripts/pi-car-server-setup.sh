@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installerar WebSocket-styrservern (styrservo + ESC) på Raspberry Pi.
+# Installerar WebSocket-styrservern (STM32 UART bridge) på Raspberry Pi.
 # Kör på Pi:n:  bash scripts/pi-car-server-setup.sh
 set -euo pipefail
 
@@ -15,7 +15,7 @@ sudo apt-get update
 echo "==> Installerar byggberoenden och python-paket"
 sudo apt-get install -y \
   build-essential git wget unzip \
-  python3 python3-pip python3-venv python3-setuptools python3-websockets || true
+  python3 python3-pip python3-venv python3-setuptools python3-websockets python3-serial || true
 
 echo "==> Säkerställer att pigpiod finns"
 if command -v pigpiod >/dev/null 2>&1; then
@@ -84,8 +84,8 @@ fi
 
 
 
-echo "==> Lägger till $RUN_USER i gruppen gpio"
-sudo usermod -aG gpio "$RUN_USER" || true
+echo "==> Lägger till $RUN_USER i grupperna dialout/gpio"
+sudo usermod -aG dialout,gpio "$RUN_USER" || true
 
 echo "==> Installerar systemd-tjänsten $SERVICE_NAME"
 sed -e "s|__APP_DIR__|$APP_DIR|g" -e "s|__USER__|$RUN_USER|g" \
@@ -111,9 +111,8 @@ IP="$(hostname -I | awk '{print $1}')"
 cat <<EOF
 
 Klart!
-  Styrservo : GPIO 18 (pin 12)  signal
-  ESC       : GPIO 13 (pin 33)  signal
-  GND från servo/ESC till Pi GND (t.ex. pin 6). Mata INTE servot från Pi:ns 5V.
+  STM32 UART : /dev/serial0 @ 115200 baud
+  Kontroll   : WebSocket-kommandon skickas vidare som STM32 CONTROL-paket.
 
   WebSocket : ws://$IP:81
 

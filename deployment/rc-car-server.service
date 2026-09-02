@@ -1,7 +1,7 @@
 [Unit]
-Description=RC Car WebSocket control server (styrservo + ESC)
-After=network-online.target pigpiod.service
-Wants=network-online.target pigpiod.service
+Description=RC Car WebSocket to STM32 UART bridge
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -9,6 +9,8 @@ User=__USER__
 WorkingDirectory=__APP_DIR__/deployment
 ExecStart=/usr/bin/python3 __APP_DIR__/deployment/rc-car-server.py
 Environment=RC_PORT=81
+Environment=RC_STM32_UART_PORT=/dev/serial0
+Environment=RC_STM32_UART_BAUD=115200
 Environment=RC_STEERING_GPIO=18
 Environment=RC_ESC_GPIO=13
 Environment=RC_WATCHDOG_TIMEOUT=0.5
@@ -20,7 +22,7 @@ Environment=RC_TOKEN=
 Environment=PYTHONUNBUFFERED=1
 Restart=always
 RestartSec=3
-SupplementaryGroups=gpio
+SupplementaryGroups=dialout gpio
 # Port 81 är en privilegierad port (<1024) – tillåt bindning utan att köra som root.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
