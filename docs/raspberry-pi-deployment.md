@@ -382,10 +382,10 @@ Skriptet:
 
 1. hämtar senaste koden från GitHub (`GITHUB_TOKEN=xxx` för privata repon),
 2. bygger webbappen,
-3. installerar/uppdaterar alla systemd-tjänster (webb, kamera, styrserver, OLED),
+3. installerar/uppdaterar alla systemd-tjänster (webb, kamera, styrserver),
 4. aktiverar dem så de startar vid boot och skriver ut en hälsokontroll.
 
-Användbara flaggor: `SKIP_BUILD=1`, `WITH_OLED=0`, `WITH_CAMERA=0`,
+Användbara flaggor: `SKIP_BUILD=1`, `WITH_CAMERA=0`,
 `WITH_CAR_SERVER=0`, `BRANCH=main`.
 
 ## Åtkomsttoken (autentisering)

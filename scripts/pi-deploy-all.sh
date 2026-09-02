@@ -17,7 +17,6 @@ BRANCH="${BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 WITH_CAMERA="${WITH_CAMERA:-1}"
 WITH_CAR_SERVER="${WITH_CAR_SERVER:-1}"
-WITH_OLED="${WITH_OLED:-1}"
 
 # --- 1. Hämta senaste koden ------------------------------------------------
 if [ -d .git ]; then
@@ -56,13 +55,12 @@ install_service() {
   sudo systemctl enable "$name" >/dev/null
 }
 
-# --- 4. Kamera / styrserver / OLED ----------------------------------------
+# --- 4. Kamera / styrserver ------------------------------------------------
 [ "$WITH_CAMERA" = "1" ] && install_service "pi-camera" "deployment/pi-camera.service"
 [ "$WITH_CAR_SERVER" = "1" ] && install_service "rc-car-server" "deployment/rc-car-server.service"
-[ "$WITH_OLED" = "1" ] && install_service "pi-oled" "deployment/pi-oled.service"
 
 sudo systemctl daemon-reload
-for svc in pi-camera rc-car-server pi-oled; do
+for svc in pi-camera rc-car-server; do
   if [ -f "/etc/systemd/system/$svc.service" ]; then
     sudo systemctl restart "$svc" || true
   fi
@@ -74,7 +72,7 @@ IP="$(hostname -I | awk '{print $1}')"
 echo
 echo "================ STATUS ================"
 FAILED=0
-for svc in rc-control pi-camera rc-car-server pi-oled; do
+for svc in rc-control pi-camera rc-car-server; do
   [ -f "/etc/systemd/system/$svc.service" ] || continue
   if systemctl is-active --quiet "$svc"; then
     printf "  %-16s OK\n" "$svc"
@@ -88,7 +86,6 @@ cat <<EOF
   Webbapp    : http://$IP
   Kamera     : http://$IP/camera/stream
   WebSocket  : ws://$IP:81
-  OLED visar : $(hostname) / $IP
 ========================================
 EOF
 
