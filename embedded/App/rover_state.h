@@ -28,6 +28,7 @@ typedef struct
   uint8_t digital_output_mask;
   uint16_t buzzer_frequency_hz;
 
+  uint32_t rpi_last_rx_ms;
   bool rpi_connected;
   bool rpi_power_enabled;
   bool rpi_poweroff_ok;

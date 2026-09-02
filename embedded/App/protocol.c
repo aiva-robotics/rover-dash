@@ -51,7 +51,12 @@ uint16_t protocol_crc16_ccitt(const uint8_t *data, size_t length)
 
 static bool protocol_is_known_type(uint8_t type)
 {
-  return (type == PROTOCOL_MSG_CONTROL) || (type == PROTOCOL_MSG_RPI_SHUTDOWN) || (type == PROTOCOL_MSG_STATUS) || (type == PROTOCOL_MSG_DIAGNOSTICS);
+  return (type == PROTOCOL_MSG_CONTROL) ||
+         (type == PROTOCOL_MSG_RPI_SHUTDOWN) ||
+         (type == PROTOCOL_MSG_DISPLAY_DATA) ||
+         (type == PROTOCOL_MSG_DISPLAY_UPDATE) ||
+         (type == PROTOCOL_MSG_STATUS) ||
+         (type == PROTOCOL_MSG_DIAGNOSTICS);
 }
 
 static bool cobs_decode(const uint8_t *input, size_t input_length, uint8_t *output, size_t output_capacity, size_t *output_length)

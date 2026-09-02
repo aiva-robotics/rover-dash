@@ -2,10 +2,13 @@
 
 #include "control_task.h"
 #include "main.h"
+#include "oled_task.h"
 #include "protocol.h"
 #include "uart_task.h"
 
 #define RPI_BOOT_POWER_DELAY_MS 100u
+#define RPI_READY_TIMEOUT_MS 10000u
+#define RPI_COMMUNICATION_TIMEOUT_MS 2000u
 #define RPI_SHUTDOWN_REPEAT_MS 100u
 #define POWER_BUTTON_DEBOUNCE_MS 50u
 #define POWER_BUTTON_LONG_PRESS_MS 3000u
@@ -32,6 +35,8 @@ static uint32_t button_pressed_ms;
 static bool button_stable_pressed;
 static bool button_sample_pressed;
 static bool long_press_handled;
+static bool wait_ready_offline_displayed;
+static bool running_offline_displayed;
 
 static void set_pi_power(bool enabled)
 {
@@ -59,6 +64,33 @@ static void enter_status(pi_status_state_t status, uint32_t now_ms)
   if (pi_state != 0)
   {
     pi_state->rpi_status = (uint8_t)status;
+  }
+
+  switch (status)
+  {
+    case PI_STATUS_BOOT_DELAY:
+      display_status("ROVERCORE", "STARTING...");
+      break;
+    case PI_STATUS_WAIT_READY:
+      display_status("RASPBERRY PI", "BOOTING...");
+      wait_ready_offline_displayed = false;
+      running_offline_displayed = false;
+      break;
+    case PI_STATUS_RUNNING:
+      display_status("RASPBERRY PI", "CONNECTED");
+      display_restore_previous();
+      running_offline_displayed = false;
+      break;
+    case PI_STATUS_SHUTDOWN_REQUESTED:
+      display_status("RASPBERRY PI", "SHUTDOWN");
+      break;
+    case PI_STATUS_POWERED_OFF:
+      display_status("RASPBERRY PI", "POWER OFF");
+      break;
+    case PI_STATUS_FORCED_OFF:
+    default:
+      display_status("POWER FAULT", "PI DISABLED");
+      break;
   }
 }
 
@@ -160,11 +192,14 @@ void pi_status_task_init(rover_state_t *state, rover_diag_t *diag)
   button_changed_ms = now_ms;
   button_pressed_ms = now_ms;
   long_press_handled = false;
+  wait_ready_offline_displayed = false;
+  running_offline_displayed = false;
 
   set_pi_power(false);
   request_failsafe(true);
   if (pi_state != 0)
   {
+    pi_state->rpi_last_rx_ms = 0u;
     pi_state->rpi_connected = false;
     pi_state->rpi_poweroff_ok = read_poweroff_ok();
     pi_state->rpi_shutdown_requested = false;
@@ -209,10 +244,29 @@ void pi_status_task(void)
         request_failsafe(false);
         enter_status(PI_STATUS_RUNNING, now_ms);
       }
+      else if (!wait_ready_offline_displayed && ((uint32_t)(now_ms - pi_state_started_ms) >= RPI_READY_TIMEOUT_MS))
+      {
+        display_status("RASPBERRY PI", "OFFLINE");
+        wait_ready_offline_displayed = true;
+      }
       break;
 
     case PI_STATUS_RUNNING:
       request_failsafe(false);
+      if ((pi_state != 0) &&
+          pi_state->rpi_connected &&
+          ((uint32_t)(now_ms - pi_state->rpi_last_rx_ms) >= RPI_COMMUNICATION_TIMEOUT_MS))
+      {
+        pi_state->rpi_connected = false;
+        display_status("RASPBERRY PI", "OFFLINE");
+        running_offline_displayed = true;
+      }
+      else if ((pi_state != 0) && pi_state->rpi_connected && running_offline_displayed)
+      {
+        display_status("RASPBERRY PI", "CONNECTED");
+        display_restore_previous();
+        running_offline_displayed = false;
+      }
       if (clicked)
       {
         start_shutdown(now_ms);

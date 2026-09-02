@@ -1,25 +1,31 @@
 #include "uart_task.h"
 
 #include "control_task.h"
+#include "oled_task.h"
 #include "protocol.h"
 
 #include <string.h>
 
-#define UART_DMA_RX_BUFFER_SIZE 128u
-#define UART_RX_RING_SIZE 256u
+#define UART_DMA_RX_BUFFER_SIZE 1024u
+#define UART_RX_RING_SIZE 2048u
+#define UART_RING_INDEX_MASK (UART_RX_RING_SIZE - 1u)
+
+_Static_assert((UART_RX_RING_SIZE & UART_RING_INDEX_MASK) == 0u, "UART_RX_RING_SIZE must be a power of two");
 
 static UART_HandleTypeDef *uart_handle;
 static rover_state_t *uart_state;
 static rover_diag_t *uart_diag;
 static uint8_t uart_dma_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
+static uint8_t uart_dma_tx_buffer[PROTOCOL_MAX_FRAME_SIZE];
 static uint8_t uart_rx_ring[UART_RX_RING_SIZE];
 static volatile uint16_t uart_rx_head;
 static volatile uint16_t uart_rx_tail;
 static volatile bool uart_tx_busy;
+static volatile uint16_t uart_dma_rx_position;
 
 static uint16_t ring_next(uint16_t index)
 {
-  return (uint16_t)((index + 1u) % UART_RX_RING_SIZE);
+  return (uint16_t)((index + 1u) & UART_RING_INDEX_MASK);
 }
 
 static void ring_push(uint8_t byte)
@@ -70,9 +76,26 @@ static void handle_packet(const protocol_packet_t *packet)
     }
     uint16_t buzzer_frequency_hz = read_u16_le(&packet->payload[PROTOCOL_CONTROL_BUZZER_FREQUENCY_INDEX]);
     control_task_apply_command(rc_command, packet->payload[PROTOCOL_CONTROL_OUTPUT_MASK_INDEX], buzzer_frequency_hz, HAL_GetTick());
-    if (uart_state != 0)
+  }
+  else if (packet->type == PROTOCOL_MSG_DISPLAY_DATA)
+  {
+    if ((packet->payload_length < 2u) ||
+        !display_receive_rpi_chunk(packet->payload[0], &packet->payload[1], (uint8_t)(packet->payload_length - 1u)))
     {
-      uart_state->rpi_connected = true;
+      if (uart_diag != 0)
+      {
+        uart_diag->uart_length_errors++;
+      }
+    }
+  }
+  else if (packet->type == PROTOCOL_MSG_DISPLAY_UPDATE)
+  {
+    if ((packet->payload_length != 0u) || !display_rpi_update())
+    {
+      if (uart_diag != 0)
+      {
+        uart_diag->uart_length_errors++;
+      }
     }
   }
 }
@@ -109,6 +132,7 @@ void uart_task_init(UART_HandleTypeDef *uart, rover_state_t *state, rover_diag_t
   uart_handle = uart;
   uart_state = state;
   uart_diag = diag;
+  uart_dma_rx_position = 0u;
 
   if (uart_handle != 0)
   {
@@ -120,15 +144,13 @@ void uart_task_init(UART_HandleTypeDef *uart, rover_state_t *state, rover_diag_t
     HAL_NVIC_EnableIRQ(USART2_IRQn);
 
     (void)HAL_UARTEx_ReceiveToIdle_DMA(uart_handle, uart_dma_rx_buffer, UART_DMA_RX_BUFFER_SIZE);
-    if (uart_handle->hdmarx != 0)
-    {
-      __HAL_DMA_DISABLE_IT(uart_handle->hdmarx, DMA_IT_HT);
-    }
   }
 }
 
 void uart_task_rx_event_callback(UART_HandleTypeDef *huart, uint16_t size)
 {
+  uint16_t previous_position;
+
   if (huart != uart_handle)
   {
     return;
@@ -139,16 +161,32 @@ void uart_task_rx_event_callback(UART_HandleTypeDef *huart, uint16_t size)
     size = UART_DMA_RX_BUFFER_SIZE;
   }
 
-  for (uint16_t i = 0u; i < size; i++)
+  previous_position = uart_dma_rx_position;
+  if (size == previous_position)
   {
-    ring_push(uart_dma_rx_buffer[i]);
+    return;
   }
 
-  (void)HAL_UARTEx_ReceiveToIdle_DMA(uart_handle, uart_dma_rx_buffer, UART_DMA_RX_BUFFER_SIZE);
-  if (uart_handle->hdmarx != 0)
+  if (size > previous_position)
   {
-    __HAL_DMA_DISABLE_IT(uart_handle->hdmarx, DMA_IT_HT);
+    for (uint16_t i = previous_position; i < size; i++)
+    {
+      ring_push(uart_dma_rx_buffer[i]);
+    }
   }
+  else
+  {
+    for (uint16_t i = previous_position; i < UART_DMA_RX_BUFFER_SIZE; i++)
+    {
+      ring_push(uart_dma_rx_buffer[i]);
+    }
+    for (uint16_t i = 0u; i < size; i++)
+    {
+      ring_push(uart_dma_rx_buffer[i]);
+    }
+  }
+
+  uart_dma_rx_position = size;
 }
 
 void uart_task(void)
@@ -167,9 +205,15 @@ void uart_task(void)
 
       if (status == PROTOCOL_STATUS_OK)
       {
+        uint32_t now_ms = HAL_GetTick();
         if (uart_diag != 0)
         {
           uart_diag->uart_rx_frames++;
+        }
+        if (uart_state != 0)
+        {
+          uart_state->rpi_last_rx_ms = now_ms;
+          uart_state->rpi_connected = true;
         }
         handle_packet(&packet);
       }
@@ -195,13 +239,14 @@ void uart_task(void)
 
 bool uart_task_send_frame(const uint8_t *frame, uint16_t length)
 {
-  if ((uart_handle == 0) || uart_tx_busy || (frame == 0) || (length == 0u))
+  if ((uart_handle == 0) || uart_tx_busy || (frame == 0) || (length == 0u) || (length > sizeof(uart_dma_tx_buffer)))
   {
     return false;
   }
 
+  memcpy(uart_dma_tx_buffer, frame, length);
   uart_tx_busy = true;
-  if (HAL_UART_Transmit_DMA(uart_handle, (uint8_t *)frame, length) != HAL_OK)
+  if (HAL_UART_Transmit_DMA(uart_handle, uart_dma_tx_buffer, length) != HAL_OK)
   {
     uart_tx_busy = false;
     return false;

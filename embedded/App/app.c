@@ -4,6 +4,7 @@
 #include "buzzer.h"
 #include "control_task.h"
 #include "i2c_task.h"
+#include "oled_task.h"
 #include "pi_status_task.h"
 #include "scheduler.h"
 #include "speed_task.h"
@@ -27,7 +28,8 @@ static scheduler_task_t tasks[] =
   {control_task, 10u, 0u},
   {uart_task, 1u, 0u},
   {adc_task, 10u, 0u},
-  {i2c_task, 10u, 0u},
+  {i2c_task, 1u, 0u},
+  {oled_task, 5u, 0u},
   {pi_status_task, 10u, 0u},
   {speed_task, 10u, 0u},
   {status_task, 100u, 0u}
@@ -39,6 +41,7 @@ void app_init(void)
   adc_task_init(&hadc1, &hadc2, &htim6, &rover_state, &rover_diag);
   uart_task_init(&huart2, &rover_state, &rover_diag);
   i2c_task_init(&hi2c1, &rover_state, &rover_diag);
+  oled_task_init(&rover_state, &rover_diag);
   speed_task_init(&htim2, &rover_state, &rover_diag);
   buzzer_init(&htim4);
   pi_status_task_init(&rover_state, &rover_diag);

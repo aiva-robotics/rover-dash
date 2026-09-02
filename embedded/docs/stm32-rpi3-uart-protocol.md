@@ -11,6 +11,7 @@ The Raspberry Pi sends control commands to the STM32 for:
 - 4 generic RC PWM outputs
 - 4 digital outputs
 - Buzzer frequency
+- Optional OLED framebuffer content
 
 The STM32 sends status and telemetry back to the Raspberry Pi containing:
 
@@ -69,6 +70,8 @@ Output byte order: little-endian
 ```text
 0x01 CONTROL       Raspberry Pi -> STM32
 0x02 RPI_SHUTDOWN  STM32 -> Raspberry Pi
+0x03 DISPLAY_DATA  Raspberry Pi -> STM32
+0x04 DISPLAY_UPDATE Raspberry Pi -> STM32
 0x80 STATUS        STM32 -> Raspberry Pi
 0x81 DIAGNOSTICS   Reserved/optional
 ```
@@ -128,7 +131,7 @@ RC output scaling on STM32:
 +1000 -> 2000 us pulse
 ```
 
-The Raspberry Pi should send `CONTROL` periodically while active. A good default rate is `20 Hz`.
+The Raspberry Pi should send `CONTROL` periodically while active. A good default rate is `20 Hz`. The STM32 output failsafe timeout is currently `1000 ms`; if no valid `CONTROL` packet is received within that time, RC outputs return to neutral, digital outputs turn off, and the buzzer turns off.
 
 ## RPI_SHUTDOWN Packet
 
@@ -162,6 +165,109 @@ Raspberry Pi GPIO: GPIO26
 ```
 
 The STM32 then disables `REG_5V_EN` and removes Raspberry Pi power.
+
+## OLED Ownership And Framebuffer Display
+
+The STM32 owns the physical OLED display at all times. The Raspberry Pi must not access the OLED I2C bus directly. If the Raspberry Pi wants to draw on the OLED, it sends a complete 128x32 monochrome framebuffer over UART and the STM32 decides whether to show it.
+
+The STM32 keeps two independent 512-byte framebuffers:
+
+```text
+local_framebuffer: STM32-generated status and warning display
+rpi_framebuffer:   latest complete framebuffer received from Raspberry Pi
+```
+
+The OLED framebuffer is arranged as 4 pages of 128 bytes. Each byte represents one vertical column of 8 pixels, matching the SSD1306 page format.
+
+At startup the active display source is always STM32/local. This lets the STM32 show local startup and power-management messages before the Raspberry Pi has booted.
+
+Typical local STM32 messages include:
+
+```text
+ROVERCORE
+STARTING...
+
+RASPBERRY PI
+BOOTING...
+
+RASPBERRY PI
+CONNECTED
+
+RASPBERRY PI
+SHUTDOWN
+
+RASPBERRY PI
+POWER OFF
+
+POWER FAULT
+PI DISABLED
+```
+
+### DISPLAY_DATA Packet
+
+Direction:
+
+```text
+Raspberry Pi -> STM32
+```
+
+Message type:
+
+```text
+0x03
+```
+
+Payload layout:
+
+```text
+byte 0:     chunk number, 0..8
+bytes 1..N: framebuffer data bytes
+```
+
+Chunk sizes:
+
+```text
+chunks 0..7: payload length 64 bytes, containing 63 framebuffer bytes
+chunk 8:     payload length 9 bytes, containing 8 framebuffer bytes
+```
+
+For compatibility, the STM32 also accepts chunk `8` with payload length `64` and ignores padding beyond the final 8 framebuffer bytes.
+
+The framebuffer byte offset for each chunk is:
+
+```text
+offset = chunk_number * 63
+```
+
+Receiving `DISPLAY_DATA` does not immediately change what is shown on the OLED. The STM32 only stores the data in `rpi_framebuffer`.
+
+### DISPLAY_UPDATE Packet
+
+Direction:
+
+```text
+Raspberry Pi -> STM32
+```
+
+Message type:
+
+```text
+0x04
+```
+
+Payload length:
+
+```text
+0 bytes
+```
+
+When `DISPLAY_UPDATE` is received, the STM32 shows `rpi_framebuffer` only if all 9 chunks have been received. Incomplete framebuffer transfers are ignored and the currently displayed source remains unchanged.
+
+The Raspberry Pi does not need to retransmit the framebuffer after a temporary STM32 local display override. The STM32 keeps the latest valid Raspberry Pi framebuffer stored separately.
+
+The Raspberry Pi should keep the periodic `CONTROL` stream running while sending display chunks. Display packets count as Raspberry Pi communication, but they do not refresh the output-control failsafe timer.
+
+At `115200 baud`, one full-size encoded display chunk takes roughly `6 ms` on the UART line. The STM32 UART receive path is sized to accept a complete 9-chunk display burst, but the Raspberry Pi should still serialize writes in order and avoid overlapping writes from multiple async producers.
 
 ## STATUS Packet
 

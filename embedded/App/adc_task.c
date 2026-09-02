@@ -38,7 +38,7 @@ void adc_task_init(ADC_HandleTypeDef *adc1, ADC_HandleTypeDef *adc2, TIM_HandleT
 
 	if (adc2_handle != 0)
 	{
-		(void)HAL_ADC_Start(adc2_handle);
+		(void)HAL_ADCEx_Calibration_Start(adc2_handle, ADC_SINGLE_ENDED);
 	}
 }
 
@@ -49,10 +49,18 @@ void adc_task(void)
 	// ADC1 is read using DMA
 	if (adc2_handle != 0)
 	{
-		if (HAL_ADC_PollForConversion(adc2_handle, 0u) == HAL_OK)
+		HAL_StatusTypeDef status = HAL_ADC_Start(adc2_handle);
+		if (status == HAL_OK)
 		{
-			adc_dma[ADC_CH_4] = HAL_ADC_GetValue(adc2_handle);
+			status = HAL_ADC_PollForConversion(adc2_handle, 1u);
+
+			if (status == HAL_OK)
+			{
+				adc_dma[ADC_CH_4] = (uint16_t)HAL_ADC_GetValue(adc2_handle);
+			}
 		}
+
+		(void)HAL_ADC_Stop(adc2_handle);
 	}
 
 	for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++)

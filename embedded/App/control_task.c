@@ -3,7 +3,7 @@
 #include "buzzer.h"
 #include "main.h"
 
-#define CONTROL_FAILSAFE_TIMEOUT_MS 250u
+#define CONTROL_FAILSAFE_TIMEOUT_MS 1000u
 #define RC_COMMAND_MIN (-1000)
 #define RC_COMMAND_MAX 1000
 #define RC_PULSE_MIN_US 1000u
@@ -98,6 +98,28 @@ static void store_safe_state(void)
   control_state->buzzer_frequency_hz = 0u;
 }
 
+static void apply_state_outputs(void)
+{
+  if (control_state == 0)
+  {
+    return;
+  }
+
+  for (uint8_t output = 0u; output < RC_OUTPUT_COUNT; output++)
+  {
+    rc_output_set(output, control_state->rc_command[output]);
+  }
+  digital_outputs_set(control_state->digital_output_mask);
+  if (control_state->buzzer_frequency_hz == 0u)
+  {
+    buzzer_stop();
+  }
+  else
+  {
+    buzzer_start(control_state->buzzer_frequency_hz);
+  }
+}
+
 void control_task_init(TIM_HandleTypeDef *rc_output_timer, rover_state_t *state, rover_diag_t *diag)
 {
   control_rc_output_timer = rc_output_timer;
@@ -128,13 +150,6 @@ void control_task_apply_command(const int16_t rc_command[4], uint8_t digital_out
 
   last_control_message_ms = now_ms;
 
-  if (forced_failsafe_active)
-  {
-    store_safe_state();
-    apply_safe_outputs();
-    return;
-  }
-
   if (control_state != 0)
   {
     for (uint8_t output = 0u; output < RC_OUTPUT_COUNT; output++)
@@ -143,41 +158,41 @@ void control_task_apply_command(const int16_t rc_command[4], uint8_t digital_out
     }
     control_state->digital_output_mask = masked_outputs;
     control_state->buzzer_frequency_hz = buzzer_frequency_hz;
-    control_state->rpi_connected = true;
   }
 
-  for (uint8_t output = 0u; output < RC_OUTPUT_COUNT; output++)
+  if (forced_failsafe_active)
   {
-    rc_output_set(output, rc_command[output]);
+    apply_safe_outputs();
+    return;
   }
-  digital_outputs_set(masked_outputs);
-  if (buzzer_frequency_hz == 0u)
-  {
-    buzzer_stop();
-  }
-  else
-  {
-    buzzer_start(buzzer_frequency_hz);
-  }
+
+  apply_state_outputs();
 }
 
 void control_task_set_forced_failsafe(bool enabled)
 {
+  bool was_forced_failsafe_active = forced_failsafe_active;
   forced_failsafe_active = enabled;
   if (enabled)
   {
     store_safe_state();
     apply_safe_outputs();
   }
+  else if (was_forced_failsafe_active &&
+           ((uint32_t)(HAL_GetTick() - last_control_message_ms) < CONTROL_FAILSAFE_TIMEOUT_MS))
+  {
+    apply_state_outputs();
+  }
 }
 
 void control_task(void)
 {
-  bool failsafe_active = forced_failsafe_active; // || ((uint32_t)(now_ms - last_control_message_ms) >= CONTROL_FAILSAFE_TIMEOUT_MS);
+  uint32_t now_ms = HAL_GetTick();
+  bool communication_timeout = (uint32_t)(now_ms - last_control_message_ms) >= CONTROL_FAILSAFE_TIMEOUT_MS;
+  bool failsafe_active = forced_failsafe_active || communication_timeout;
 
   if (control_state != 0)
   {
-    control_state->rpi_connected = !failsafe_active;
     control_state->failsafe_active = failsafe_active;
 
     if (failsafe_active)
