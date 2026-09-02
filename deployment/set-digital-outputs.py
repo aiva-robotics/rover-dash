@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Set the STM32 digital outputs through the Raspberry Pi WebSocket bridge.
+r"""Set the STM32 digital outputs through the Raspberry Pi WebSocket bridge.
 
 Examples from Windows PowerShell:
     py deployment\set-digital-outputs.py --host 192.168.1.42 --digital 15
@@ -73,17 +73,46 @@ async def run() -> int:
 
     print(f"Connecting to {url}")
     async with websockets.connect(url) as ws:
+        try:
+            greeting = await asyncio.wait_for(ws.recv(), timeout=1.0)
+            print(f"Connected: {greeting}")
+        except asyncio.TimeoutError:
+            print("Connected: no initial telemetry received")
+
         message = {"digital": mask}
         await ws.send(json.dumps(message))
         print(f"Sent: {message}")
 
-        try:
-            reply = await asyncio.wait_for(ws.recv(), timeout=2.0)
-            print(f"Received: {reply}")
-        except asyncio.TimeoutError:
-            print("No reply within 2 seconds. Command was still sent.")
+        deadline = asyncio.get_running_loop().time() + 3.0
+        latest_reply = None
+        latest_mask = None
 
-    return 0
+        while asyncio.get_running_loop().time() < deadline:
+            timeout = max(0.1, deadline - asyncio.get_running_loop().time())
+            try:
+                reply = await asyncio.wait_for(ws.recv(), timeout=timeout)
+            except asyncio.TimeoutError:
+                break
+
+            latest_reply = reply
+            try:
+                data = json.loads(reply)
+                latest_mask = data.get("stm32", {}).get("digitalMask")
+            except json.JSONDecodeError:
+                latest_mask = None
+
+            if latest_mask == mask:
+                print(f"Confirmed STM32 digitalMask: {latest_mask}")
+                return 0
+
+        if latest_mask is not None:
+            print(f"Latest STM32 digitalMask: {latest_mask}, expected {mask}")
+        if latest_reply is not None:
+            print(f"Latest received: {latest_reply}")
+        else:
+            print("No telemetry received after command. Command was still sent.")
+
+        return 1
 
 
 def main() -> int:
