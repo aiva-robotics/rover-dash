@@ -21,7 +21,6 @@ static uint8_t uart_rx_ring[UART_RX_RING_SIZE];
 static volatile uint16_t uart_rx_head;
 static volatile uint16_t uart_rx_tail;
 static volatile bool uart_tx_busy;
-static volatile uint16_t uart_dma_rx_position;
 
 static uint16_t ring_next(uint16_t index)
 {
@@ -132,7 +131,6 @@ void uart_task_init(UART_HandleTypeDef *uart, rover_state_t *state, rover_diag_t
   uart_handle = uart;
   uart_state = state;
   uart_diag = diag;
-  uart_dma_rx_position = 0u;
 
   if (uart_handle != 0)
   {
@@ -144,13 +142,15 @@ void uart_task_init(UART_HandleTypeDef *uart, rover_state_t *state, rover_diag_t
     HAL_NVIC_EnableIRQ(USART2_IRQn);
 
     (void)HAL_UARTEx_ReceiveToIdle_DMA(uart_handle, uart_dma_rx_buffer, UART_DMA_RX_BUFFER_SIZE);
+    if (uart_handle->hdmarx != 0)
+    {
+      __HAL_DMA_DISABLE_IT(uart_handle->hdmarx, DMA_IT_HT);
+    }
   }
 }
 
 void uart_task_rx_event_callback(UART_HandleTypeDef *huart, uint16_t size)
 {
-  uint16_t previous_position;
-
   if (huart != uart_handle)
   {
     return;
@@ -161,32 +161,16 @@ void uart_task_rx_event_callback(UART_HandleTypeDef *huart, uint16_t size)
     size = UART_DMA_RX_BUFFER_SIZE;
   }
 
-  previous_position = uart_dma_rx_position;
-  if (size == previous_position)
+  for (uint16_t i = 0u; i < size; i++)
   {
-    return;
+    ring_push(uart_dma_rx_buffer[i]);
   }
 
-  if (size > previous_position)
+  (void)HAL_UARTEx_ReceiveToIdle_DMA(uart_handle, uart_dma_rx_buffer, UART_DMA_RX_BUFFER_SIZE);
+  if (uart_handle->hdmarx != 0)
   {
-    for (uint16_t i = previous_position; i < size; i++)
-    {
-      ring_push(uart_dma_rx_buffer[i]);
-    }
+    __HAL_DMA_DISABLE_IT(uart_handle->hdmarx, DMA_IT_HT);
   }
-  else
-  {
-    for (uint16_t i = previous_position; i < UART_DMA_RX_BUFFER_SIZE; i++)
-    {
-      ring_push(uart_dma_rx_buffer[i]);
-    }
-    for (uint16_t i = 0u; i < size; i++)
-    {
-      ring_push(uart_dma_rx_buffer[i]);
-    }
-  }
-
-  uart_dma_rx_position = size;
 }
 
 void uart_task(void)
