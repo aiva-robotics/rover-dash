@@ -269,7 +269,7 @@ def run(args: argparse.Namespace) -> int:
     with serial.Serial(args.port, args.baud, timeout=0, write_timeout=1) as ser:
         print(f"Opened {ser.port} at {ser.baudrate} baud")
         next_control = time.monotonic()
-        next_oled = time.monotonic() + args.oled_after
+        next_oled = time.monotonic() + getattr(args, "oled_after", 0.0)
         oled_sent = False
 
         while True:
