@@ -4,13 +4,14 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #define OLED_ADDRESS (0x3cu << 1)
 #define OLED_WIDTH 128u
 #define OLED_HEIGHT 32u
 #define OLED_PAGE_COUNT (OLED_HEIGHT / 8u)
 #define OLED_FRAMEBUFFER_SIZE (OLED_WIDTH * OLED_PAGE_COUNT)
-#define OLED_DATA_CHUNK_SIZE 16u
+#define OLED_DATA_CHUNK_SIZE 32u
 #define DISPLAY_RPI_CHUNK_COUNT 9u
 #define DISPLAY_RPI_FULL_CHUNK_SIZE 63u
 #define DISPLAY_RPI_LAST_CHUNK_SIZE 8u
@@ -148,10 +149,7 @@ static uint8_t glyph_column(char character, uint8_t column)
 
 static void framebuffer_clear(uint8_t *framebuffer)
 {
-  for (uint16_t i = 0u; i < OLED_FRAMEBUFFER_SIZE; i++)
-  {
-    framebuffer[i] = 0u;
-  }
+  memset(framebuffer, 0, OLED_FRAMEBUFFER_SIZE);
 }
 
 static void framebuffer_draw_char(uint8_t *framebuffer, uint8_t x, uint8_t page, char character)
@@ -283,10 +281,7 @@ bool display_receive_rpi_chunk(uint8_t chunk, const uint8_t *data, uint8_t lengt
     copy_length = DISPLAY_RPI_FULL_CHUNK_SIZE;
   }
 
-  for (uint8_t i = 0u; i < copy_length; i++)
-  {
-    rpi_framebuffer[offset + i] = data[i];
-  }
+  memcpy(&rpi_framebuffer[offset], data, copy_length);
   received_chunks |= (uint16_t)(1u << chunk);
 
   return true;
