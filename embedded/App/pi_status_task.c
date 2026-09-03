@@ -6,7 +6,7 @@
 #include "protocol.h"
 #include "uart_task.h"
 
-#define RPI_BOOT_POWER_DELAY_MS 100u
+#define RPI_BOOT_POWER_DELAY_MS 2000u
 #define RPI_READY_TIMEOUT_MS 10000u
 #define RPI_COMMUNICATION_TIMEOUT_MS 2000u
 #define RPI_SHUTDOWN_REPEAT_MS 100u
@@ -229,10 +229,9 @@ void pi_status_task(void)
   {
     case PI_STATUS_BOOT_DELAY:
       request_failsafe(true);
-      set_pi_power(false);
+      set_pi_power(true);
       if ((uint32_t)(now_ms - pi_state_started_ms) >= RPI_BOOT_POWER_DELAY_MS)
       {
-        set_pi_power(true);
         enter_status(PI_STATUS_WAIT_READY, now_ms);
       }
       break;
