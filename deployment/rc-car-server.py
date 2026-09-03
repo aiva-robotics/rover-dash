@@ -458,6 +458,7 @@ def request_raspberry_pi_poweroff() -> None:
 
     shutdown_command_started = True
     try:
+        log.warning("Kör Raspberry Pi poweroff-kommando argv=%s", command)
         subprocess.Popen(command)
         log.warning("Startade Raspberry Pi poweroff-kommando: %s", config.SHUTDOWN_COMMAND)
     except Exception:

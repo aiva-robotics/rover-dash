@@ -10,6 +10,7 @@
 #define RPI_READY_TIMEOUT_MS 10000u
 #define RPI_COMMUNICATION_TIMEOUT_MS 2000u
 #define RPI_SHUTDOWN_REPEAT_MS 100u
+#define RPI_SHUTDOWN_FORCE_TIMEOUT_MS 30000u
 #define POWER_BUTTON_DEBOUNCE_MS 50u
 #define POWER_BUTTON_LONG_PRESS_MS 3000u
 #define POWER_SWITCH_PRESSED_STATE GPIO_PIN_RESET
@@ -287,6 +288,10 @@ void pi_status_task(void)
           pi_state->rpi_shutdown_requested = false;
         }
         enter_status(PI_STATUS_POWERED_OFF, now_ms);
+      }
+      else if ((uint32_t)(now_ms - pi_state_started_ms) >= RPI_SHUTDOWN_FORCE_TIMEOUT_MS)
+      {
+        force_poweroff(now_ms);
       }
       break;
 
