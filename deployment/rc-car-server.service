@@ -11,6 +11,7 @@ ExecStart=/usr/bin/python3 __APP_DIR__/deployment/rc-car-server.py
 Environment=RC_PORT=81
 Environment=RC_STM32_UART_PORT=/dev/serial0
 Environment=RC_STM32_UART_BAUD=115200
+Environment=RC_STM32_HEARTBEAT_INTERVAL=1.0
 Environment=RC_SHUTDOWN_ON_STM32_REQUEST=1
 Environment=RC_SHUTDOWN_COMMAND=/usr/bin/systemctl poweroff
 Environment=RC_STEERING_GPIO=18

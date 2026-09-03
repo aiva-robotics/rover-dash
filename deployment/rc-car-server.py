@@ -674,6 +674,19 @@ async def telemetry_loop() -> None:
             log.exception("Oväntat fel i telemetriloopen")
 
 
+async def stm32_heartbeat_loop() -> None:
+    """Send periodic neutral/control state so STM32 knows the Pi is alive."""
+    interval = max(0.2, config.STM32_HEARTBEAT_INTERVAL)
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            await asyncio.get_running_loop().run_in_executor(None, outputs._send_control)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Oväntat fel i STM32 heartbeat-loopen")
+
+
 async def stm32_rx_loop() -> None:
     """Reads STM32 UART packets without blocking the WebSocket event loop."""
     loop = asyncio.get_running_loop()
@@ -918,11 +931,13 @@ async def main() -> None:
             log.warning("RC_TOKEN är inte satt – vem som helst i nätverket kan styra bilen")
         watch = asyncio.create_task(watchdog())
         tele = asyncio.create_task(telemetry_loop())
+        heartbeat = asyncio.create_task(stm32_heartbeat_loop())
         stats = asyncio.create_task(system_stats_loop())
         stm32 = asyncio.create_task(stm32_rx_loop())
         await stop.wait()
         watch.cancel()
         tele.cancel()
+        heartbeat.cancel()
         stats.cancel()
         stm32.cancel()
 
