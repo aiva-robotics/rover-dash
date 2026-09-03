@@ -69,7 +69,7 @@ static void enter_status(pi_status_state_t status, uint32_t now_ms)
   switch (status)
   {
     case PI_STATUS_BOOT_DELAY:
-      display_status("ROVERCORE", "STARTING...");
+      display_splash();
       break;
     case PI_STATUS_WAIT_READY:
       display_status("RASPBERRY PI", "BOOTING...");
@@ -82,14 +82,14 @@ static void enter_status(pi_status_state_t status, uint32_t now_ms)
       running_offline_displayed = false;
       break;
     case PI_STATUS_SHUTDOWN_REQUESTED:
-      display_status("RASPBERRY PI", "SHUTDOWN");
+      display_status("SHUTDOWN REQ", "WAIT PI OFF");
       break;
     case PI_STATUS_POWERED_OFF:
-      display_status("RASPBERRY PI", "POWER OFF");
+      display_status("SHUTDOWN READY", "5V OFF");
       break;
     case PI_STATUS_FORCED_OFF:
     default:
-      display_status("POWER FAULT", "PI DISABLED");
+      display_status("FORCED OFF", "5V DISABLED");
       break;
   }
 }

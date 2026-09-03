@@ -102,5 +102,11 @@ STM32_THROTTLE_RC_OUTPUT = _int("RC_STM32_THROTTLE_RC_OUTPUT", 1)
 STM32_LIGHTS_OUTPUT_BIT = _int("RC_STM32_LIGHTS_OUTPUT_BIT", 0)
 STM32_HORN_BUZZER_HZ = _int("RC_STM32_HORN_BUZZER_HZ", 1200)
 
+# When STM32 sends MSG_RPI_SHUTDOWN, ask Linux to power off. The Raspberry Pi
+# gpio-poweroff overlay should drive GPIO26 high during poweroff so STM32 knows
+# it is safe to disable REG_5V_EN.
+SHUTDOWN_ON_STM32_REQUEST = _bool("RC_SHUTDOWN_ON_STM32_REQUEST", False)
+SHUTDOWN_COMMAND = os.environ.get("RC_SHUTDOWN_COMMAND", "/usr/bin/systemctl poweroff")
+
 # Simulera hårdvara (för test på maskin utan pigpio)
 SIMULATE = _bool("RC_SIMULATE", False)

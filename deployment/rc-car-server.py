@@ -22,6 +22,7 @@ import re
 import base64
 import hmac
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -419,10 +420,35 @@ active_session = ""
 driver_info = {"session": "", "label": "", "since": None, "handover": None}
 # Skyddar check-and-set av aktiv förare mot samtidiga anslutningar.
 client_lock = asyncio.Lock()
+shutdown_command_started = False
 
 
 
 # --- Telemetriläsning -------------------------------------------------------
+def request_raspberry_pi_poweroff() -> None:
+    """Start the configured Linux shutdown command once after STM32 requests it."""
+    global shutdown_command_started
+
+    if not config.SHUTDOWN_ON_STM32_REQUEST:
+        log.warning("Ignorerar STM32 shutdown-begäran: RC_SHUTDOWN_ON_STM32_REQUEST=0")
+        return
+    if shutdown_command_started:
+        return
+
+    command = shlex.split(config.SHUTDOWN_COMMAND)
+    if not command:
+        log.error("Kan inte stänga av Raspberry Pi: RC_SHUTDOWN_COMMAND är tom")
+        return
+
+    shutdown_command_started = True
+    try:
+        subprocess.Popen(command)
+        log.warning("Startade Raspberry Pi poweroff-kommando: %s", config.SHUTDOWN_COMMAND)
+    except Exception:
+        shutdown_command_started = False
+        log.exception("Kunde inte starta Raspberry Pi poweroff-kommando: %s", config.SHUTDOWN_COMMAND)
+
+
 def cpu_temperature() -> float | None:
     try:
         with open("/sys/class/thermal/thermal_zone0/temp", "r", encoding="utf-8") as fh:
@@ -655,6 +681,7 @@ async def stm32_rx_loop() -> None:
                             await client.send(json.dumps({"shutdownRequested": True}))
                         except Exception:
                             pass
+                    request_raspberry_pi_poweroff()
                 else:
                     log.debug("STM32 RX type=0x%02x payload=%s", msg_type, payload.hex(" "))
         except asyncio.CancelledError:

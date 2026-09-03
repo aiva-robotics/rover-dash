@@ -1,6 +1,7 @@
 #include "oled_task.h"
 
 #include "i2c_task.h"
+#include "version.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -61,6 +62,19 @@ static const uint8_t *active_framebuffer;
 static const uint8_t *pending_framebuffer;
 static uint8_t local_framebuffer[OLED_FRAMEBUFFER_SIZE];
 static uint8_t rpi_framebuffer[OLED_FRAMEBUFFER_SIZE];
+
+static const uint8_t rovercore_logo_24x24[] =
+{
+  0xf0u, 0xfcu, 0x0eu, 0x06u, 0x03u, 0x03u, 0x83u, 0xc3u,
+  0x63u, 0x33u, 0x1bu, 0x0fu, 0x0fu, 0x1bu, 0x33u, 0x63u,
+  0xc3u, 0x83u, 0x03u, 0x03u, 0x06u, 0x0eu, 0xfcu, 0xf0u,
+  0x03u, 0x0fu, 0x1cu, 0x30u, 0x60u, 0x60u, 0x61u, 0x63u,
+  0x66u, 0x6cu, 0x78u, 0x70u, 0x70u, 0x78u, 0x6cu, 0x66u,
+  0x63u, 0x61u, 0x60u, 0x60u, 0x30u, 0x1cu, 0x0fu, 0x03u,
+  0x1fu, 0x3fu, 0x70u, 0x60u, 0xc0u, 0xc0u, 0xc0u, 0xc0u,
+  0xc0u, 0xc0u, 0xffu, 0xffu, 0xcfu, 0xdbu, 0xf3u, 0xe3u,
+  0xc3u, 0xc3u, 0xc0u, 0xc0u, 0x60u, 0x70u, 0x3fu, 0x1fu
+};
 
 static bool oled_submit_command(uint8_t command)
 {
@@ -183,6 +197,22 @@ static void framebuffer_draw_text(uint8_t *framebuffer, uint8_t x, uint8_t page,
   }
 }
 
+static void framebuffer_draw_bitmap_24x24(uint8_t *framebuffer, uint8_t x, uint8_t page, const uint8_t *bitmap)
+{
+  if ((framebuffer == 0) || (bitmap == 0) || (page > (OLED_PAGE_COUNT - 3u)) || (x > (OLED_WIDTH - 24u)))
+  {
+    return;
+  }
+
+  for (uint8_t bitmap_page = 0u; bitmap_page < 3u; bitmap_page++)
+  {
+    for (uint8_t column = 0u; column < 24u; column++)
+    {
+      framebuffer[((uint16_t)page + bitmap_page) * OLED_WIDTH + x + column] = bitmap[(uint16_t)bitmap_page * 24u + column];
+    }
+  }
+}
+
 static void oled_write_framebuffer(const uint8_t *buffer)
 {
   if (buffer == 0)
@@ -206,6 +236,16 @@ void display_status(const char *line1, const char *line2)
   framebuffer_clear(local_framebuffer);
   framebuffer_draw_text(local_framebuffer, 0u, 0u, line1);
   framebuffer_draw_text(local_framebuffer, 0u, 2u, line2);
+  display_show_local();
+}
+
+void display_splash(void)
+{
+  framebuffer_clear(local_framebuffer);
+  framebuffer_draw_bitmap_24x24(local_framebuffer, 0u, 0u, rovercore_logo_24x24);
+  framebuffer_draw_text(local_framebuffer, 32u, 0u, ROVERCORE_FIRMWARE_NAME);
+  framebuffer_draw_text(local_framebuffer, 32u, 2u, "FW " ROVERCORE_FIRMWARE_VERSION);
+  framebuffer_draw_text(local_framebuffer, 32u, 3u, "STARTING...");
   display_show_local();
 }
 
@@ -316,8 +356,7 @@ void oled_task_init(rover_state_t *state, rover_diag_t *diag)
   pending_framebuffer = local_framebuffer;
   framebuffer_clear(local_framebuffer);
   framebuffer_clear(rpi_framebuffer);
-  framebuffer_draw_text(local_framebuffer, 0u, 0u, "ROVERCORE");
-  framebuffer_draw_text(local_framebuffer, 0u, 2u, "STARTING...");
+  display_splash();
 }
 
 void oled_task(void)

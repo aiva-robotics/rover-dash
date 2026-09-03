@@ -11,6 +11,7 @@ typedef enum
 
 void oled_task_init(rover_state_t *state, rover_diag_t *diag);
 void oled_task(void);
+void display_splash(void);
 void display_status(const char *line1, const char *line2);
 void display_show_local(void);
 void display_show_rpi(void);
