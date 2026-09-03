@@ -4,6 +4,7 @@ r"""Set the STM32 digital outputs through the Raspberry Pi WebSocket bridge.
 Examples from Windows PowerShell:
     py deployment\set-digital-outputs.py --host 192.168.1.42 --digital 15
     py deployment\set-digital-outputs.py --host 192.168.1.42 --on 0 2
+    py deployment\set-digital-outputs.py --host 192.168.1.42 --on 3 --hold 0
     py deployment\set-digital-outputs.py --host 192.168.1.42 --off
 
 Digital output mapping:
@@ -32,6 +33,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", help="Raspberry Pi IP/hostname, for example 192.168.1.42")
     parser.add_argument("--port", type=int, default=81, help="WebSocket port, default 81")
     parser.add_argument("--url", help="Full WebSocket URL, for example ws://192.168.1.42:81")
+    parser.add_argument(
+        "--hold",
+        type=float,
+        default=None,
+        help="Keep the WebSocket open after confirmation. Use 0 to hold until Ctrl+C.",
+    )
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--digital", type=lambda value: int(value, 0), help="Bitmask 0..15, e.g. 0x0f")
@@ -103,6 +110,8 @@ async def run() -> int:
 
             if latest_mask == mask:
                 print(f"Confirmed STM32 digitalMask: {latest_mask}")
+                if args.hold is not None:
+                    await hold_connection(args.hold)
                 return 0
 
         if latest_mask is not None:
@@ -113,6 +122,16 @@ async def run() -> int:
             print("No telemetry received after command. Command was still sent.")
 
         return 1
+
+
+async def hold_connection(seconds: float) -> None:
+    if seconds <= 0:
+        print("Holding output state. Press Ctrl+C to disconnect.")
+        while True:
+            await asyncio.sleep(3600.0)
+
+    print(f"Holding output state for {seconds:g} seconds.")
+    await asyncio.sleep(seconds)
 
 
 def main() -> int:

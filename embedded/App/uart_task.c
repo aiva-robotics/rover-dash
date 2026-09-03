@@ -17,6 +17,7 @@ static rover_state_t *uart_state;
 static rover_diag_t *uart_diag;
 static uint8_t uart_dma_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
 static uint8_t uart_dma_tx_buffer[PROTOCOL_MAX_FRAME_SIZE];
+static uint8_t uart_rx_byte;
 static uint8_t uart_rx_ring[UART_RX_RING_SIZE];
 static volatile uint16_t uart_rx_head;
 static volatile uint16_t uart_rx_tail;
@@ -25,6 +26,16 @@ static volatile bool uart_tx_busy;
 static uint16_t ring_next(uint16_t index)
 {
   return (uint16_t)((index + 1u) & UART_RING_INDEX_MASK);
+}
+
+static void uart_start_receive_to_idle(void)
+{
+  if (uart_handle == 0)
+  {
+    return;
+  }
+
+  (void)HAL_UART_Receive_IT(uart_handle, &uart_rx_byte, 1u);
 }
 
 static void ring_push(uint8_t byte)
@@ -141,11 +152,7 @@ void uart_task_init(UART_HandleTypeDef *uart, rover_state_t *state, rover_diag_t
     HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(USART2_IRQn);
 
-    (void)HAL_UARTEx_ReceiveToIdle_DMA(uart_handle, uart_dma_rx_buffer, UART_DMA_RX_BUFFER_SIZE);
-    if (uart_handle->hdmarx != 0)
-    {
-      __HAL_DMA_DISABLE_IT(uart_handle->hdmarx, DMA_IT_HT);
-    }
+    uart_start_receive_to_idle();
   }
 }
 
@@ -166,11 +173,34 @@ void uart_task_rx_event_callback(UART_HandleTypeDef *huart, uint16_t size)
     ring_push(uart_dma_rx_buffer[i]);
   }
 
-  (void)HAL_UARTEx_ReceiveToIdle_DMA(uart_handle, uart_dma_rx_buffer, UART_DMA_RX_BUFFER_SIZE);
-  if (uart_handle->hdmarx != 0)
+  uart_start_receive_to_idle();
+}
+
+void uart_task_rx_complete_callback(UART_HandleTypeDef *huart)
+{
+  if (huart != uart_handle)
   {
-    __HAL_DMA_DISABLE_IT(uart_handle->hdmarx, DMA_IT_HT);
+    return;
   }
+
+  ring_push(uart_rx_byte);
+  uart_start_receive_to_idle();
+}
+
+void uart_task_error_callback(UART_HandleTypeDef *huart)
+{
+  if (huart != uart_handle)
+  {
+    return;
+  }
+
+  if (uart_diag != 0)
+  {
+    uart_diag->uart_overruns++;
+  }
+
+  (void)HAL_UART_AbortReceive(huart);
+  uart_start_receive_to_idle();
 }
 
 void uart_task(void)
