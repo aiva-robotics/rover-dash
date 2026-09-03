@@ -66,6 +66,7 @@ STATUS_PAYLOAD_SIZE = 56
 DISPLAY_FRAMEBUFFER_SIZE = 512
 DISPLAY_CHUNK_DATA_SIZE = 63
 DISPLAY_CHUNK_COUNT = 9
+MAX_ENCODED_FRAME_SIZE = MAX_PAYLOAD_SIZE + 6
 
 
 def crc16_ccitt(data: bytes) -> int:
@@ -246,6 +247,7 @@ class STM32Bridge:
         self.latest_status: dict = {}
         self.shutdown_requested = False
         self.rx_buffer = bytearray()
+        self.rx_synced = False
         self.last_steering_us = config.STEERING_MID_US
         self.last_esc_us = config.ESC_MID_US
 
@@ -261,6 +263,7 @@ class STM32Bridge:
             timeout=0,
             write_timeout=config.STM32_WRITE_TIMEOUT,
         )
+        self.ser.reset_input_buffer()
         log.info("STM32 UART öppen: %s @ %s baud", config.STM32_UART_PORT, config.STM32_UART_BAUD)
 
     def arm(self) -> None:
@@ -385,7 +388,15 @@ class STM32Bridge:
                 break
             frame = bytes(self.rx_buffer[:delimiter])
             del self.rx_buffer[: delimiter + 1]
+            if not self.rx_synced:
+                self.rx_synced = True
+                if frame:
+                    log.info("STM32 RX synkroniserad efter att ha ignorerat en partiell startframe")
+                continue
             if not frame:
+                continue
+            if len(frame) > MAX_ENCODED_FRAME_SIZE:
+                log.warning("STM32 RX oversized COBS frame dropped: %d bytes", len(frame))
                 continue
             try:
                 packets.append(decode_packet(frame))
