@@ -248,6 +248,8 @@ class STM32Bridge:
         self.shutdown_requested = False
         self.rx_buffer = bytearray()
         self.rx_synced = False
+        self.tx_count = 0
+        self.heartbeat_tx_count = 0
         self.last_steering_us = config.STEERING_MID_US
         self.last_esc_us = config.ESC_MID_US
 
@@ -283,17 +285,20 @@ class STM32Bridge:
             self.ser = None
             self.armed = False
 
-    def _write_frame(self, frame: bytes) -> None:
+    def _write_frame(self, frame: bytes, label: str = "frame") -> None:
         if self.simulated:
             log.debug("SIM STM32 TX: %s", frame.hex(" "))
             return
         if self.ser is None:
+            log.warning("STM32 TX %s ignorerad: UART är inte öppen", label)
             return
         with self.lock:
-            self.ser.write(frame)
+            written = self.ser.write(frame)
             self.ser.flush()
+            self.tx_count += 1
+        log.debug("STM32 TX #%d %s: %d bytes", self.tx_count, label, written)
 
-    def _send_control(self) -> None:
+    def _send_control(self, label: str = "control") -> None:
         payload = bytearray()
         for value in self.rc:
             payload += int(clamp(value, -1000, 1000)).to_bytes(2, "little", signed=True)
@@ -301,7 +306,7 @@ class STM32Bridge:
         payload += int(clamp(self.buzzer_hz, 0, 65535)).to_bytes(2, "little")
         if len(payload) != CONTROL_PAYLOAD_SIZE:
             raise RuntimeError("internal CONTROL payload size mismatch")
-        self._write_frame(encode_packet(MSG_CONTROL, bytes(payload)))
+        self._write_frame(encode_packet(MSG_CONTROL, bytes(payload)), label)
 
     def apply(self, throttle: float, steering: float) -> None:
         if abs(throttle) < config.ESC_DEADBAND:
@@ -316,7 +321,7 @@ class STM32Bridge:
         throttle_command = self.rc[config.STM32_THROTTLE_RC_OUTPUT] if 0 <= config.STM32_THROTTLE_RC_OUTPUT < len(self.rc) else 0
         self.last_steering_us = config.STEERING_MID_US + steering_command // 2
         self.last_esc_us = config.ESC_MID_US + throttle_command // 2
-        self._send_control()
+        self._send_control("control")
 
     def apply_board_control(self, rc=None, digital=None, buzzer=None) -> None:
         if isinstance(rc, list) and len(rc) == 4:
@@ -325,13 +330,13 @@ class STM32Bridge:
             self.digital_mask = _int_auto(digital) & 0x0F
         if buzzer is not None:
             self.buzzer_hz = int(clamp(float(_int_auto(buzzer)), 0, 65535))
-        self._send_control()
+        self._send_control("control")
 
     def neutral(self) -> None:
         self.rc = [0, 0, 0, 0]
         self.last_steering_us = config.STEERING_MID_US
         self.last_esc_us = config.ESC_MID_US
-        self._send_control()
+        self._send_control("neutral")
 
     def _set_digital_bit(self, bit: int, enabled: bool) -> None:
         if not 0 <= bit <= 3:
@@ -340,7 +345,7 @@ class STM32Bridge:
             self.digital_mask |= 1 << bit
         else:
             self.digital_mask &= ~(1 << bit)
-        self._send_control()
+        self._send_control("digital")
 
     def set_lights(self, on: bool) -> None:
         self._set_digital_bit(config.STM32_LIGHTS_OUTPUT_BIT, on)
@@ -349,15 +354,15 @@ class STM32Bridge:
     def horn(self, seconds: float | None = None) -> None:
         duration = config.HORN_SECONDS if seconds is None else float(seconds)
         self.buzzer_hz = config.STM32_HORN_BUZZER_HZ
-        self._send_control()
+        self._send_control("buzzer-on")
         time.sleep(max(0.05, min(3.0, duration)))
         self.buzzer_hz = 0
-        self._send_control()
+        self._send_control("buzzer-off")
 
     def accessories_off(self) -> None:
         self.digital_mask = 0
         self.buzzer_hz = 0
-        self._send_control()
+        self._send_control("accessories-off")
 
     def fail_safe(self) -> None:
         self.neutral()
@@ -368,10 +373,10 @@ class STM32Bridge:
         for chunk in range(DISPLAY_CHUNK_COUNT):
             offset = chunk * DISPLAY_CHUNK_DATA_SIZE
             data = framebuffer[offset : offset + DISPLAY_CHUNK_DATA_SIZE]
-            self._write_frame(encode_packet(MSG_DISPLAY_DATA, bytes([chunk]) + data))
+            self._write_frame(encode_packet(MSG_DISPLAY_DATA, bytes([chunk]) + data), "display-data")
             if chunk_delay > 0:
                 time.sleep(chunk_delay)
-        self._write_frame(encode_packet(MSG_DISPLAY_UPDATE))
+        self._write_frame(encode_packet(MSG_DISPLAY_UPDATE), "display-update")
 
     def read_available(self) -> list[tuple[int, bytes]]:
         if self.simulated or self.ser is None:
@@ -680,7 +685,16 @@ async def stm32_heartbeat_loop() -> None:
     while True:
         try:
             await asyncio.sleep(interval)
-            await asyncio.get_running_loop().run_in_executor(None, outputs._send_control)
+            await asyncio.get_running_loop().run_in_executor(None, outputs._send_control, "heartbeat")
+            outputs.heartbeat_tx_count += 1
+            if outputs.heartbeat_tx_count <= 3 or (outputs.heartbeat_tx_count % 10) == 0:
+                log.info(
+                    "STM32 heartbeat TX #%d: rc=%s digital=0x%X buzzer=%d",
+                    outputs.heartbeat_tx_count,
+                    outputs.rc,
+                    outputs.digital_mask,
+                    outputs.buzzer_hz,
+                )
         except asyncio.CancelledError:
             raise
         except Exception:
