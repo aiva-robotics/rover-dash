@@ -186,7 +186,13 @@ function ControlStation() {
     } catch (err) {
       console.debug("Tutljud kunde inte spelas upp", err);
     }
-  }, [sendAction]);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hornTimerRef.current) clearTimeout(hornTimerRef.current);
+    };
+  }, []);
 
   // Stäng AudioContext vid unmount – annars ackumuleras kontexter (webbläsare
   // har ett tak) och tutan slutar fungera efter några remounts.
