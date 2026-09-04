@@ -1,0 +1,15 @@
+[Unit]
+Description=RC Car Camera Stream Watchdog
+After=pi-camera.service network-online.target
+Wants=network-online.target
+BindsTo=pi-camera.service
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /home/pi/rc-control-app/deployment/pi-camera-watchdog.sh
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
