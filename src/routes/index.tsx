@@ -155,8 +155,12 @@ function ControlStation() {
   }, [hudMode, hydrated, log, t, locale]);
 
 
+  const hornTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const horn = useCallback(() => {
-    sendAction("horn");
+    // Summern styrs via det löpande kommandot – håll den på i en kort puls.
+    setHornOn(true);
+    if (hornTimerRef.current) clearTimeout(hornTimerRef.current);
+    hornTimerRef.current = setTimeout(() => setHornOn(false), 400);
     try {
       let ctx = audioRef.current;
       if (!ctx || ctx.state === "closed") {
