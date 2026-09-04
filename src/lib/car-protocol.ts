@@ -45,6 +45,15 @@ export type CarStatus = {
   estop?: boolean;
   armed?: boolean;
   failsafe?: boolean;
+  /** Rå eko-telemetri från STM32-kortet. */
+  stm32?: {
+    rc?: number[];
+    digitalMask?: number;
+    buzzerHz?: number;
+    failsafeCount?: number;
+    uptimeMs?: number;
+    [key: string]: unknown;
+  };
   /** Vem som styr just nu, enligt servern. */
   driver?: {
     session?: string | null;
