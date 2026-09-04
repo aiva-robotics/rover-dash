@@ -14,7 +14,7 @@ import { usePhotoGallery } from "@/hooks/usePhotoGallery";
 import { useSettings } from "@/hooks/useSettings";
 import { useI18n } from "@/hooks/useI18n";
 import { downloadBlob, photoFileName } from "@/lib/photoStore";
-import { clamp } from "@/lib/car-protocol";
+import { clamp, DIGITAL_LIGHTS_BIT, HORN_FREQUENCY_HZ } from "@/lib/car-protocol";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -64,6 +64,8 @@ function ControlStation() {
   const [throttleRaw, setThrottleRaw] = useState(0);
   const [steeringRaw, setSteeringRaw] = useState(0);
   const [estop, setEstop] = useState(false);
+  const [lightsOn, setLightsOn] = useState(false);
+  const [hornOn, setHornOn] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
   const videoRef = useRef<VideoFeedHandle | null>(null);
 
@@ -71,7 +73,10 @@ function ControlStation() {
   const online = connection === "connected";
   const driveLocked = !online || estop;
   const accessoryLocked = !online || estop;
-  const headlights = status.headlights ?? false;
+  // Ljusstatus speglas från STM32:ans eko när det finns, annars lokalt önskeläge.
+  const echoedMask = status.stm32?.digitalMask;
+  const headlights =
+    typeof echoedMask === "number" ? (echoedMask & DIGITAL_LIGHTS_BIT) !== 0 : lightsOn;
 
   const throttle = driveLocked
     ? 0
@@ -89,8 +94,14 @@ function ControlStation() {
   // Nödstoppet ingår i varje kommando (20 Hz) så att bilen får det även om
   // ett enstaka action-meddelande går förlorat.
   useEffect(() => {
-    setCommand({ throttle, steering, estop });
-  }, [throttle, steering, estop, setCommand]);
+    setCommand({
+      throttle,
+      steering,
+      estop,
+      digital: !estop && lightsOn ? DIGITAL_LIGHTS_BIT : 0,
+      buzzer: !estop && hornOn ? HORN_FREQUENCY_HZ : 0,
+    });
+  }, [throttle, steering, estop, lightsOn, hornOn, setCommand]);
 
   /** Servern har inte kvitterat nödstoppsläget ännu. */
   const estopPending = online && (status.estop ?? false) !== estop;
@@ -144,8 +155,12 @@ function ControlStation() {
   }, [hudMode, hydrated, log, t, locale]);
 
 
+  const hornTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const horn = useCallback(() => {
-    sendAction("horn");
+    // Summern styrs via det löpande kommandot – håll den på i en kort puls.
+    setHornOn(true);
+    if (hornTimerRef.current) clearTimeout(hornTimerRef.current);
+    hornTimerRef.current = setTimeout(() => setHornOn(false), 400);
     try {
       let ctx = audioRef.current;
       if (!ctx || ctx.state === "closed") {
@@ -171,7 +186,13 @@ function ControlStation() {
     } catch (err) {
       console.debug("Tutljud kunde inte spelas upp", err);
     }
-  }, [sendAction]);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hornTimerRef.current) clearTimeout(hornTimerRef.current);
+    };
+  }, []);
 
   // Stäng AudioContext vid unmount – annars ackumuleras kontexter (webbläsare
   // har ett tak) och tutan slutar fungera efter några remounts.
@@ -319,7 +340,7 @@ function ControlStation() {
         pending={estopPending}
 
         onToggleLights={() => {
-          sendAction("headlights", !headlights);
+          setLightsOn(!headlights);
         }}
         onHorn={horn}
         onPhoto={() => void handlePhoto()}

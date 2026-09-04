@@ -3,7 +3,34 @@ export type DriveCommand = {
   steering: number; // -100..100
   /** Nödstopp ingår i varje kommando så att servern alltid vet läget. */
   estop?: boolean;
+  /** Digitala utgångar, bitmask 0..15 (bit 0 = ljus). */
+  digital?: number;
+  /** Summerfrekvens i Hz, 0 = tyst. */
+  buzzer?: number;
 };
+
+/** Digital utgång (bit) för strålkastare på STM32-kortet. */
+export const DIGITAL_LIGHTS_BIT = 0x01;
+/** Frekvens som skickas till summern när tutan är aktiv. */
+export const HORN_FREQUENCY_HZ = 2000;
+
+/** Skalar appens -100..100 till STM32-kortets RC-område -1000..1000. */
+export function toRcValue(value: number) {
+  return Math.round(clamp(value, -100, 100) * 10);
+}
+
+/**
+ * Bygger serverns kommandopaket.
+ * Kanal 1 (index 0) = styrning, kanal 3 (index 2) = gas.
+ */
+export function toServerCommand(cmd: DriveCommand) {
+  return {
+    rc: [toRcValue(cmd.steering), 0, toRcValue(cmd.throttle), 0],
+    digital: cmd.digital ?? 0,
+    buzzer: cmd.buzzer ?? 0,
+    estop: cmd.estop ?? false,
+  };
+}
 
 export type CarStatus = {
   battery?: number; // volts
@@ -18,6 +45,15 @@ export type CarStatus = {
   estop?: boolean;
   armed?: boolean;
   failsafe?: boolean;
+  /** Rå eko-telemetri från STM32-kortet. */
+  stm32?: {
+    rc?: number[];
+    digitalMask?: number;
+    buzzerHz?: number;
+    failsafeCount?: number;
+    uptimeMs?: number;
+    [key: string]: unknown;
+  };
   /** Vem som styr just nu, enligt servern. */
   driver?: {
     session?: string | null;

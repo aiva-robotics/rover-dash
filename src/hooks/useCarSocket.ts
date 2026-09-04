@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CarStatus, ConnectionState, DriveCommand, LogEntry } from "@/lib/car-protocol";
+import { toServerCommand } from "@/lib/car-protocol";
 import { translate, type TFunc, type TKey, type TVars } from "@/lib/i18n";
 
 const SEND_INTERVAL = 50; // ms -> 20 Hz, måste vara snabbare än serverns watchdog
@@ -454,7 +455,7 @@ export function useCarSocket({
   useEffect(() => {
     if (demoMode) return;
     const interval = setInterval(() => {
-      if (sendJson(commandRef.current)) {
+      if (sendJson(toServerCommand(commandRef.current))) {
         patchHealth({ commandsSent: healthRef.current.commandsSent + 1 });
       }
     }, SEND_INTERVAL);
