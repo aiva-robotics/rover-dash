@@ -94,8 +94,14 @@ function ControlStation() {
   // Nödstoppet ingår i varje kommando (20 Hz) så att bilen får det även om
   // ett enstaka action-meddelande går förlorat.
   useEffect(() => {
-    setCommand({ throttle, steering, estop });
-  }, [throttle, steering, estop, setCommand]);
+    setCommand({
+      throttle,
+      steering,
+      estop,
+      digital: !estop && lightsOn ? DIGITAL_LIGHTS_BIT : 0,
+      buzzer: !estop && hornOn ? HORN_FREQUENCY_HZ : 0,
+    });
+  }, [throttle, steering, estop, lightsOn, hornOn, setCommand]);
 
   /** Servern har inte kvitterat nödstoppsläget ännu. */
   const estopPending = online && (status.estop ?? false) !== estop;
