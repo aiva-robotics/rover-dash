@@ -26,6 +26,7 @@ static rover_diag_t rover_diag;
 static scheduler_task_t tasks[] =
 {
   {control_task, 10u, 0u},
+  {buzzer_task, 10u, 0u},
   {uart_task, 1u, 0u},
   {adc_task, 10u, 0u},
   {i2c_task, 1u, 0u},

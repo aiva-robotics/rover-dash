@@ -1,5 +1,6 @@
 #include "pi_status_task.h"
 
+#include "buzzer.h"
 #include "control_task.h"
 #include "main.h"
 #include "oled_task.h"
@@ -38,6 +39,22 @@ static bool button_sample_pressed;
 static bool long_press_handled;
 static bool wait_ready_offline_displayed;
 static bool running_offline_displayed;
+
+static const buzzer_note_t rpi_connected_tone[] =
+{
+  {880u, 90u},
+  {0u, 40u},
+  {1320u, 130u}
+};
+
+static const buzzer_note_t rpi_shutdown_ready_tone[] =
+{
+  {660u, 120u},
+  {0u, 50u},
+  {440u, 180u},
+  {0u, 50u},
+  {330u, 260u}
+};
 
 static void set_pi_power(bool enabled)
 {
@@ -80,6 +97,7 @@ static void enter_status(pi_status_state_t status, uint32_t now_ms)
     case PI_STATUS_RUNNING:
       display_status("RASPBERRY PI", "CONNECTED");
       display_restore_previous();
+      buzzer_play_sequence(rpi_connected_tone, (uint8_t)(sizeof(rpi_connected_tone) / sizeof(rpi_connected_tone[0])));
       running_offline_displayed = false;
       break;
     case PI_STATUS_SHUTDOWN_REQUESTED:
@@ -87,6 +105,7 @@ static void enter_status(pi_status_state_t status, uint32_t now_ms)
       break;
     case PI_STATUS_POWERED_OFF:
       display_status("SHUTDOWN READY", "5V OFF");
+      buzzer_play_sequence(rpi_shutdown_ready_tone, (uint8_t)(sizeof(rpi_shutdown_ready_tone) / sizeof(rpi_shutdown_ready_tone[0])));
       break;
     case PI_STATUS_FORCED_OFF:
     default:
