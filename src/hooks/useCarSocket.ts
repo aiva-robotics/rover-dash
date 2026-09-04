@@ -455,7 +455,7 @@ export function useCarSocket({
   useEffect(() => {
     if (demoMode) return;
     const interval = setInterval(() => {
-      if (sendJson(commandRef.current)) {
+      if (sendJson(toServerCommand(commandRef.current))) {
         patchHealth({ commandsSent: healthRef.current.commandsSent + 1 });
       }
     }, SEND_INTERVAL);
