@@ -73,7 +73,10 @@ function ControlStation() {
   const online = connection === "connected";
   const driveLocked = !online || estop;
   const accessoryLocked = !online || estop;
-  const headlights = status.headlights ?? false;
+  // Ljusstatus speglas från STM32:ans eko när det finns, annars lokalt önskeläge.
+  const echoedMask = status.stm32?.digitalMask;
+  const headlights =
+    typeof echoedMask === "number" ? (echoedMask & DIGITAL_LIGHTS_BIT) !== 0 : lightsOn;
 
   const throttle = driveLocked
     ? 0
