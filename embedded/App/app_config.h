@@ -1,0 +1,6 @@
+#ifndef APP_CONFIG_H
+#define APP_CONFIG_H
+
+#define APP_CONTROL_FAILSAFE_ENABLED 0u
+
+#endif

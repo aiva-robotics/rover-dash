@@ -1,9 +1,9 @@
 #include "control_task.h"
 
+#include "app_config.h"
 #include "buzzer.h"
 #include "main.h"
 
-#define CONTROL_FAILSAFE_ENABLED 0u
 #define CONTROL_FAILSAFE_TIMEOUT_MS 1000u
 #define RC_COMMAND_MIN (-1000)
 #define RC_COMMAND_MAX 1000
@@ -161,7 +161,7 @@ void control_task_apply_command(const int16_t rc_command[4], uint8_t digital_out
     control_state->buzzer_frequency_hz = buzzer_frequency_hz;
   }
 
-#if CONTROL_FAILSAFE_ENABLED
+#if APP_CONTROL_FAILSAFE_ENABLED
   if (forced_failsafe_active)
   {
     apply_safe_outputs();
@@ -176,7 +176,7 @@ void control_task_apply_command(const int16_t rc_command[4], uint8_t digital_out
 
 void control_task_set_forced_failsafe(bool enabled)
 {
-#if CONTROL_FAILSAFE_ENABLED
+#if APP_CONTROL_FAILSAFE_ENABLED
   bool was_forced_failsafe_active = forced_failsafe_active;
   forced_failsafe_active = enabled;
   if (enabled)
@@ -202,7 +202,7 @@ void control_task_set_forced_failsafe(bool enabled)
 
 void control_task(void)
 {
-#if CONTROL_FAILSAFE_ENABLED
+#if APP_CONTROL_FAILSAFE_ENABLED
   uint32_t now_ms = HAL_GetTick();
   bool communication_timeout = (uint32_t)(now_ms - last_control_message_ms) >= CONTROL_FAILSAFE_TIMEOUT_MS;
   bool failsafe_active = forced_failsafe_active || communication_timeout;

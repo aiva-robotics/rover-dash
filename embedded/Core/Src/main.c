@@ -56,7 +56,6 @@ TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim6;
 
 UART_HandleTypeDef huart2;
-DMA_HandleTypeDef hdma_usart2_rx;
 DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
@@ -692,9 +691,6 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-  /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
@@ -759,11 +755,6 @@ static void MX_GPIO_Init(void)
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
   adc_task_dma_full_callback(hadc);
-}
-
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
-{
-  uart_task_rx_event_callback(huart, size);
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)

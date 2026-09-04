@@ -11,7 +11,6 @@
 void uart_task_init(UART_HandleTypeDef *uart, rover_state_t *state, rover_diag_t *diag);
 void uart_task(void);
 void uart_task_rx_complete_callback(UART_HandleTypeDef *huart);
-void uart_task_rx_event_callback(UART_HandleTypeDef *huart, uint16_t size);
 void uart_task_error_callback(UART_HandleTypeDef *huart);
 bool uart_task_send_frame(const uint8_t *frame, uint16_t length);
 

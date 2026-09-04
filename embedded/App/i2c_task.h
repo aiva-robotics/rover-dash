@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define I2C_TRANSACTION_MAX_LENGTH 32u
+#define I2C_TRANSACTION_MAX_LENGTH 64u
 
 typedef enum
 {

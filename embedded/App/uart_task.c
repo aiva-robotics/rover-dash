@@ -6,21 +6,29 @@
 
 #include <string.h>
 
-#define UART_DMA_RX_BUFFER_SIZE 1024u
 #define UART_RX_RING_SIZE 2048u
 #define UART_RING_INDEX_MASK (UART_RX_RING_SIZE - 1u)
+#define UART_TX_QUEUE_LENGTH 6u
 
 _Static_assert((UART_RX_RING_SIZE & UART_RING_INDEX_MASK) == 0u, "UART_RX_RING_SIZE must be a power of two");
+
+typedef struct
+{
+  uint8_t data[PROTOCOL_MAX_FRAME_SIZE];
+  uint16_t length;
+} uart_tx_queue_item_t;
 
 static UART_HandleTypeDef *uart_handle;
 static rover_state_t *uart_state;
 static rover_diag_t *uart_diag;
-static uint8_t uart_dma_rx_buffer[UART_DMA_RX_BUFFER_SIZE];
 static uint8_t uart_dma_tx_buffer[PROTOCOL_MAX_FRAME_SIZE];
 static uint8_t uart_rx_byte;
 static uint8_t uart_rx_ring[UART_RX_RING_SIZE];
+static uart_tx_queue_item_t uart_tx_queue[UART_TX_QUEUE_LENGTH];
 static volatile uint16_t uart_rx_head;
 static volatile uint16_t uart_rx_tail;
+static volatile uint8_t uart_tx_head;
+static volatile uint8_t uart_tx_tail;
 static volatile bool uart_tx_busy;
 
 static uint16_t ring_next(uint16_t index)
@@ -28,7 +36,12 @@ static uint16_t ring_next(uint16_t index)
   return (uint16_t)((index + 1u) & UART_RING_INDEX_MASK);
 }
 
-static void uart_start_receive_to_idle(void)
+static uint8_t tx_queue_next(uint8_t index)
+{
+  return (uint8_t)((index + 1u) % UART_TX_QUEUE_LENGTH);
+}
+
+static void uart_start_rx_it(void)
 {
   if (uart_handle == 0)
   {
@@ -36,6 +49,35 @@ static void uart_start_receive_to_idle(void)
   }
 
   (void)HAL_UART_Receive_IT(uart_handle, &uart_rx_byte, 1u);
+}
+
+static void uart_try_start_tx(void)
+{
+  uint8_t tail;
+  uart_tx_queue_item_t *item;
+
+  if ((uart_handle == 0) || uart_tx_busy || (uart_tx_head == uart_tx_tail))
+  {
+    return;
+  }
+
+  tail = uart_tx_tail;
+  item = &uart_tx_queue[tail];
+  memcpy(uart_dma_tx_buffer, item->data, item->length);
+
+  uart_tx_tail = tx_queue_next(tail);
+  uart_tx_busy = true;
+  if (HAL_UART_Transmit_DMA(uart_handle, uart_dma_tx_buffer, item->length) == HAL_OK)
+  {
+    return;
+  }
+
+  uart_tx_busy = false;
+  uart_tx_tail = tail;
+  if (uart_diag != 0)
+  {
+    uart_diag->uart_overruns++;
+  }
 }
 
 static void ring_push(uint8_t byte)
@@ -142,38 +184,21 @@ void uart_task_init(UART_HandleTypeDef *uart, rover_state_t *state, rover_diag_t
   uart_handle = uart;
   uart_state = state;
   uart_diag = diag;
+  uart_rx_head = 0u;
+  uart_rx_tail = 0u;
+  uart_tx_head = 0u;
+  uart_tx_tail = 0u;
+  uart_tx_busy = false;
 
   if (uart_handle != 0)
   {
-    HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
     HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
     HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(USART2_IRQn);
 
-    uart_start_receive_to_idle();
+    uart_start_rx_it();
   }
-}
-
-void uart_task_rx_event_callback(UART_HandleTypeDef *huart, uint16_t size)
-{
-  if (huart != uart_handle)
-  {
-    return;
-  }
-
-  if (size > UART_DMA_RX_BUFFER_SIZE)
-  {
-    size = UART_DMA_RX_BUFFER_SIZE;
-  }
-
-  for (uint16_t i = 0u; i < size; i++)
-  {
-    ring_push(uart_dma_rx_buffer[i]);
-  }
-
-  uart_start_receive_to_idle();
 }
 
 void uart_task_rx_complete_callback(UART_HandleTypeDef *huart)
@@ -184,7 +209,7 @@ void uart_task_rx_complete_callback(UART_HandleTypeDef *huart)
   }
 
   ring_push(uart_rx_byte);
-  uart_start_receive_to_idle();
+  uart_start_rx_it();
 }
 
 void uart_task_error_callback(UART_HandleTypeDef *huart)
@@ -200,7 +225,7 @@ void uart_task_error_callback(UART_HandleTypeDef *huart)
   }
 
   (void)HAL_UART_AbortReceive(huart);
-  uart_start_receive_to_idle();
+  uart_start_rx_it();
 }
 
 void uart_task(void)
@@ -208,6 +233,8 @@ void uart_task(void)
   static uint8_t frame[PROTOCOL_MAX_FRAME_SIZE];
   static uint16_t frame_length;
   uint8_t byte;
+
+  uart_try_start_tx();
 
   while (ring_pop(&byte))
   {
@@ -249,22 +276,33 @@ void uart_task(void)
       }
     }
   }
+
+  uart_try_start_tx();
 }
 
 bool uart_task_send_frame(const uint8_t *frame, uint16_t length)
 {
-  if ((uart_handle == 0) || uart_tx_busy || (frame == 0) || (length == 0u) || (length > sizeof(uart_dma_tx_buffer)))
+  uint8_t next;
+
+  if ((uart_handle == 0) || (frame == 0) || (length == 0u) || (length > PROTOCOL_MAX_FRAME_SIZE))
   {
     return false;
   }
 
-  memcpy(uart_dma_tx_buffer, frame, length);
-  uart_tx_busy = true;
-  if (HAL_UART_Transmit_DMA(uart_handle, uart_dma_tx_buffer, length) != HAL_OK)
+  next = tx_queue_next(uart_tx_head);
+  if (next == uart_tx_tail)
   {
-    uart_tx_busy = false;
+    if (uart_diag != 0)
+    {
+      uart_diag->uart_overruns++;
+    }
     return false;
   }
+
+  memcpy(uart_tx_queue[uart_tx_head].data, frame, length);
+  uart_tx_queue[uart_tx_head].length = length;
+  uart_tx_head = next;
+  uart_try_start_tx();
   return true;
 }
 

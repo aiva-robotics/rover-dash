@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-#define I2C_QUEUE_LENGTH 8u
+#define I2C_QUEUE_LENGTH 12u
 #define TMP75_ADDRESS (0x48u << 1)
 #define TMP75_TEMPERATURE_REGISTER 0x00u
 #define TMP75_POLL_PERIOD_MS 250u
@@ -275,6 +275,7 @@ bool i2c_task_submit(const i2c_transaction_t *transaction)
       (transaction->length > I2C_TRANSACTION_MAX_LENGTH) ||
       (next == queue_tail))
   {
+    record_i2c_error();
     return false;
   }
 
@@ -404,18 +405,18 @@ void i2c_task(void)
     return;
   }
 
-  if (try_start_queued_transaction())
-  {
-    return;
-  }
-
   now_ms = HAL_GetTick();
   if (try_start_tmp75_poll(now_ms))
   {
     return;
   }
 
-  (void)try_start_ina226_poll(now_ms);
+  if (try_start_ina226_poll(now_ms))
+  {
+    return;
+  }
+
+  (void)try_start_queued_transaction();
 }
 
 void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
