@@ -57,37 +57,48 @@ NAPI_ARCH="$( [ "$ARCH" = "x86_64" ] && echo x64 || echo arm64 )"
 # npm has a long-standing bug where optional native packages are skipped when
 # switching platforms/lock states (https://github.com/npm/cli/issues/4828).
 # Rolldown (Vite 8), lightningcss and @tailwindcss/oxide all ship their native
-# binary that way. Install every missing binding in ONE npm operation: separate
-# `npm install --no-save` calls prune the binding installed by the previous call.
-# Vite has its own nested Rolldown, so its version (not the root Rolldown version)
-# must determine the compatible native binary.
+# binary that way. Strategy: check whether each binding can already be loaded;
+# only install the ones that are missing, in ONE npm operation (separate
+# `npm install --no-save` calls prune the binding installed by the previous call).
 package_version() {
   node -p "try{require('./node_modules/$1/package.json').version}catch(e){''}" 2>/dev/null || true
 }
 
+# Rolldown may be nested under vite OR hoisted to the root — check both.
 ROLLDOWN_VERSION="$(package_version 'vite/node_modules/rolldown')"
+[ -n "$ROLLDOWN_VERSION" ] || ROLLDOWN_VERSION="$(package_version 'rolldown')"
 LIGHTNING_VERSION="$(package_version '@tailwindcss/node/node_modules/lightningcss')"
 [ -n "$LIGHTNING_VERSION" ] || LIGHTNING_VERSION="$(package_version 'lightningcss')"
 OXIDE_VERSION="$(package_version '@tailwindcss/oxide')"
 
-NATIVE_PACKAGES=()
-[ -n "$ROLLDOWN_VERSION" ] && NATIVE_PACKAGES+=("@rolldown/binding-linux-${NAPI_ARCH}-gnu@${ROLLDOWN_VERSION}")
-[ -n "$LIGHTNING_VERSION" ] && NATIVE_PACKAGES+=("lightningcss-linux-${NAPI_ARCH}-gnu@${LIGHTNING_VERSION}")
-[ -n "$OXIDE_VERSION" ] && NATIVE_PACKAGES+=("@tailwindcss/oxide-linux-${NAPI_ARCH}-gnu@${OXIDE_VERSION}")
+binding_loads() { node -e "require('$1')" >/dev/null 2>&1; }
 
-if [ "${#NATIVE_PACKAGES[@]}" -ne 3 ]; then
-  log "ERROR: Could not determine all native dependency versions."
-  exit 1
+NATIVE_PACKAGES=()
+if ! binding_loads "@rolldown/binding-linux-${NAPI_ARCH}-gnu"; then
+  [ -n "$ROLLDOWN_VERSION" ] && NATIVE_PACKAGES+=("@rolldown/binding-linux-${NAPI_ARCH}-gnu@${ROLLDOWN_VERSION}")
+fi
+if ! binding_loads "lightningcss-linux-${NAPI_ARCH}-gnu"; then
+  [ -n "$LIGHTNING_VERSION" ] && NATIVE_PACKAGES+=("lightningcss-linux-${NAPI_ARCH}-gnu@${LIGHTNING_VERSION}")
+fi
+if ! binding_loads "@tailwindcss/oxide-linux-${NAPI_ARCH}-gnu"; then
+  [ -n "$OXIDE_VERSION" ] && NATIVE_PACKAGES+=("@tailwindcss/oxide-linux-${NAPI_ARCH}-gnu@${OXIDE_VERSION}")
 fi
 
-log "Ensuring compatible native bindings: ${NATIVE_PACKAGES[*]}"
-npm install --include=optional --no-save --package-lock=false --no-audit --no-fund "${NATIVE_PACKAGES[@]}"
+if [ "${#NATIVE_PACKAGES[@]}" -gt 0 ]; then
+  if [ -z "$ROLLDOWN_VERSION" ] || [ -z "$LIGHTNING_VERSION" ] || [ -z "$OXIDE_VERSION" ]; then
+    log "ERROR: Could not determine all native dependency versions."
+    log "rolldown='$ROLLDOWN_VERSION' lightningcss='$LIGHTNING_VERSION' oxide='$OXIDE_VERSION'"
+    exit 1
+  fi
+  log "Installing missing native bindings: ${NATIVE_PACKAGES[*]}"
+  npm install --include=optional --no-save --package-lock=false --no-audit --no-fund "${NATIVE_PACKAGES[@]}"
+else
+  log "All native bindings already present — skipping."
+fi
 
-# Check module resolution, not just a broad filename glob. The previous check
-# could accept the wrong Rolldown ABI version while Vite's nested copy still failed.
-for pkg in "${NATIVE_PACKAGES[@]}"; do
-  name="${pkg%@*}"
-  if ! node -e "require('$name')" >/dev/null 2>&1; then
+# Final verification: every required binding must load.
+for name in "@rolldown/binding-linux-${NAPI_ARCH}-gnu" "lightningcss-linux-${NAPI_ARCH}-gnu" "@tailwindcss/oxide-linux-${NAPI_ARCH}-gnu"; do
+  if ! binding_loads "$name"; then
     log "ERROR: Native binding cannot be loaded: $name"
     log "Do a clean retry: rm -rf node_modules package-lock.json && bash scripts/pi-build.sh"
     exit 1
