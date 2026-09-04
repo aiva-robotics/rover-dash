@@ -31,11 +31,17 @@ echo "==> Installerar systemd-tjänsten $SERVICE_NAME"
 sed -e "s|__APP_DIR__|$APP_DIR|g" -e "s|__USER__|$RUN_USER|g" \
   "$APP_DIR/deployment/pi-camera.service" | sudo tee "/etc/systemd/system/$SERVICE_NAME.service" >/dev/null
 
+echo "==> Installerar watchdog-tjänsten pi-camera-watchdog"
+sed -e "s|__APP_DIR__|$APP_DIR|g" -e "s|__USER__|$RUN_USER|g" \
+  "$APP_DIR/deployment/pi-camera-watchdog.service" | sudo tee /etc/systemd/system/pi-camera-watchdog.service >/dev/null
+
 sudo systemctl daemon-reload
-sudo systemctl enable "$SERVICE_NAME"
+sudo systemctl enable "$SERVICE_NAME" pi-camera-watchdog
 sudo systemctl restart "$SERVICE_NAME"
+sudo systemctl restart pi-camera-watchdog
 sleep 2
 sudo systemctl --no-pager --full status "$SERVICE_NAME" || true
+sudo systemctl --no-pager --full status pi-camera-watchdog || true
 
 IP="$(hostname -I | awk '{print $1}')"
 echo

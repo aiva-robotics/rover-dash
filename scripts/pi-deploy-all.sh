@@ -75,7 +75,7 @@ IP="$(hostname -I | awk '{print $1}')"
 echo
 echo "================ STATUS ================"
 FAILED=0
-for svc in rc-control pi-camera rc-car-server; do
+for svc in rc-control pi-camera pi-camera-watchdog rc-car-server; do
   [ -f "/etc/systemd/system/$svc.service" ] || continue
   if systemctl is-active --quiet "$svc"; then
     printf "  %-16s OK\n" "$svc"
