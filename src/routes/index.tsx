@@ -340,7 +340,7 @@ function ControlStation() {
         pending={estopPending}
 
         onToggleLights={() => {
-          sendAction("headlights", !headlights);
+          setLightsOn(!headlights);
         }}
         onHorn={horn}
         onPhoto={() => void handlePhoto()}
