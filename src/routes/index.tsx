@@ -14,7 +14,7 @@ import { usePhotoGallery } from "@/hooks/usePhotoGallery";
 import { useSettings } from "@/hooks/useSettings";
 import { useI18n } from "@/hooks/useI18n";
 import { downloadBlob, photoFileName } from "@/lib/photoStore";
-import { clamp } from "@/lib/car-protocol";
+import { clamp, DIGITAL_LIGHTS_BIT, HORN_FREQUENCY_HZ } from "@/lib/car-protocol";
 
 export const Route = createFileRoute("/")({
   head: () => ({
