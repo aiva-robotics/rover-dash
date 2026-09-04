@@ -6,7 +6,7 @@ BindsTo=pi-camera.service
 
 [Service]
 Type=simple
-ExecStart=/bin/bash /home/pi/rc-control-app/deployment/pi-camera-watchdog.sh
+ExecStart=/bin/bash __APP_DIR__/deployment/pi-camera-watchdog.sh
 Restart=always
 RestartSec=5
 User=root
