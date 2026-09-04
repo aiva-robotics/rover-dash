@@ -7,85 +7,16 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_USER="${SUDO_USER:-$USER}"
 SERVICE_NAME="rc-car-server"
 
-PIGPIO_VERSION="v79"
-
 echo "==> Uppdaterar paketförteckning"
 sudo apt-get update
 
 echo "==> Installerar byggberoenden och python-paket"
 sudo apt-get install -y \
-  build-essential git wget unzip \
+  git \
   python3 python3-pip python3-venv python3-setuptools python3-websockets python3-serial || true
 
-echo "==> Säkerställer att pigpiod finns"
-if command -v pigpiod >/dev/null 2>&1; then
-  echo "pigpiod finns redan: $(command -v pigpiod)"
-elif apt-cache policy pigpio 2>/dev/null | grep -Eq 'Candidate: [^ ]+' && \
-     ! apt-cache policy pigpio 2>/dev/null | grep -q 'Candidate: (none)'; then
-  echo "==> Installerar pigpio från apt"
-  sudo apt-get install -y pigpio python3-pigpio
-else
-  echo "==> pigpio finns inte i apt – bygger från källkod ($PIGPIO_VERSION)"
-  BUILD_DIR="$(mktemp -d)"
-  trap 'rm -rf "$BUILD_DIR"' EXIT
-
-  cd "$BUILD_DIR"
-  wget -q "https://github.com/joan2937/pigpio/archive/${PIGPIO_VERSION}.zip" -O pigpio.zip
-  unzip -q pigpio.zip
-  cd "pigpio-${PIGPIO_VERSION#v}"
-
-  echo "==> Patchar setup.py för Python 3.12+ (distutils borttaget)"
-  sed -i 's/from distutils.core import setup/from setuptools import setup/' setup.py
-
-  echo "==> Kompilerar pigpio"
-  make -j"$(nproc)"
-
-  echo "==> Installerar pigpio"
-  sudo make install
-
-  echo "==> Registrerar /usr/local/lib i länkaren (annars exit 127)"
-  echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/pigpio.conf >/dev/null
-  sudo ldconfig
-
-
-  echo "==> Installerar Python-klienten pigpio via pip"
-  sudo pip3 install --break-system-packages pigpio || sudo pip3 install pigpio || true
-fi
-
-# Se till att Python-klientbiblioteket finns även om vi byggde från källkod
-if ! python3 -c "import pigpio" 2>/dev/null; then
-  echo "==> Installerar Python-klienten pigpio"
-  sudo pip3 install --break-system-packages pigpio || sudo pip3 install pigpio
-fi
-
-echo "==> Säkerställer systemd-tjänsten pigpiod"
-if ! systemctl list-unit-files 2>/dev/null | grep -q '^pigpiod\.service'; then
-  PIGPIOD_BIN="$(command -v pigpiod || echo /usr/local/bin/pigpiod)"
-  sed "s|/usr/local/bin/pigpiod|$PIGPIOD_BIN|" "$APP_DIR/deployment/pigpiod.service" \
-    | sudo tee /etc/systemd/system/pigpiod.service >/dev/null
-  sudo systemctl daemon-reload
-fi
-
-echo "==> Startar pigpiod"
-# Om pigpiod byggdes från källkod kan libpigpio.so saknas i länkarens cache -> exit 127
-if ! ldd "$(command -v pigpiod || echo /usr/local/bin/pigpiod)" 2>/dev/null | grep -q "not found"; then
-  :
-else
-  echo "==> Saknade delade bibliotek – kör ldconfig"
-  echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/pigpio.conf >/dev/null
-  sudo ldconfig
-fi
-sudo systemctl enable --now pigpiod || true
-sleep 2
-if ! pgrep -x pigpiod >/dev/null; then
-  echo "!! pigpiod kunde inte startas – kör: sudo journalctl -u pigpiod -n 30"
-  ldd "$(command -v pigpiod || echo /usr/local/bin/pigpiod)" 2>&1 | grep "not found" || true
-fi
-
-
-
-echo "==> Lägger till $RUN_USER i grupperna dialout/gpio"
-sudo usermod -aG dialout,gpio "$RUN_USER" || true
+echo "==> Lägger till $RUN_USER i gruppen dialout"
+sudo usermod -aG dialout "$RUN_USER" || true
 
 echo "==> Installerar systemd-tjänsten $SERVICE_NAME"
 sed -e "s|__APP_DIR__|$APP_DIR|g" -e "s|__USER__|$RUN_USER|g" \

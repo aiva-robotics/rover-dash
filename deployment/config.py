@@ -31,35 +31,12 @@ def _bool(name: str, default: bool) -> bool:
 HOST = os.environ.get("RC_HOST", "0.0.0.0")
 PORT = _int("RC_PORT", 81)
 
-# --- GPIO (BCM-numrering) --------------------------------------------------
-# GPIO 18 och 13 stöder hårdvaru-PWM på Pi 3 -> jitterfria RC-pulser.
-STEERING_GPIO = _int("RC_STEERING_GPIO", 18)
-ESC_GPIO = _int("RC_ESC_GPIO", 13)
-
-# --- RC-PWM ----------------------------------------------------------------
-PWM_FREQUENCY = _int("RC_PWM_FREQ", 50)  # Hz, standard för RC-servon/ESC
-
-STEERING_MIN_US = _int("RC_STEERING_MIN_US", 1000)
-STEERING_MID_US = _int("RC_STEERING_MID_US", 1500)
-STEERING_MAX_US = _int("RC_STEERING_MAX_US", 2000)
-
-ESC_MIN_US = _int("RC_ESC_MIN_US", 1000)  # full back
-ESC_MID_US = _int("RC_ESC_MID_US", 1500)  # neutral
-ESC_MAX_US = _int("RC_ESC_MAX_US", 2000)  # full fram
-
-# Dödband kring neutral för ESC:n (procent av full utstyrning)
+# Dödband kring neutral för legacy throttle-procent.
 ESC_DEADBAND = _float("RC_ESC_DEADBAND", 3.0)
 
-# Sekunder i neutral vid start så att ESC:n hinner armera
+# Sekunder med neutrala STM32-kommandon vid start.
 ARM_SECONDS = _float("RC_ARM_SECONDS", 2.0)
 
-# --- Tillbehör (digitala utgångar) ----------------------------------------
-# Sätt till -1 för att stänga av respektive utgång.
-LIGHTS_GPIO = _int("RC_LIGHTS_GPIO", 23)
-HORN_GPIO = _int("RC_HORN_GPIO", 24)
-# True = utgången är aktiv låg (t.ex. reläkort)
-LIGHTS_ACTIVE_LOW = _bool("RC_LIGHTS_ACTIVE_LOW", False)
-HORN_ACTIVE_LOW = _bool("RC_HORN_ACTIVE_LOW", False)
 HORN_SECONDS = _float("RC_HORN_SECONDS", 0.6)
 
 # --- Kamera / stillbilder --------------------------------------------------
@@ -109,5 +86,5 @@ STM32_HORN_BUZZER_HZ = _int("RC_STM32_HORN_BUZZER_HZ", 1200)
 SHUTDOWN_ON_STM32_REQUEST = _bool("RC_SHUTDOWN_ON_STM32_REQUEST", False)
 SHUTDOWN_COMMAND = os.environ.get("RC_SHUTDOWN_COMMAND", "/usr/bin/systemctl poweroff")
 
-# Simulera hårdvara (för test på maskin utan pigpio)
+# Simulera STM32 UART (för test på maskin utan anslutet kort)
 SIMULATE = _bool("RC_SIMULATE", False)

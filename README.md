@@ -14,7 +14,7 @@ Layout:
 
   - Vänster joystick styr gas/broms.
 
-  - Höger joystick styr styrservot.
+  - Höger joystick styr vald RC-utgång på STM32-kortet.
 
   - Joysticks ska fungera med både touch och mus och automatiskt återgå till mitten när de släpps.
 

@@ -14,8 +14,6 @@ Environment=RC_STM32_UART_BAUD=115200
 Environment=RC_STM32_HEARTBEAT_INTERVAL=1.0
 Environment=RC_SHUTDOWN_ON_STM32_REQUEST=1
 Environment="RC_SHUTDOWN_COMMAND=/usr/bin/sudo -n /usr/bin/systemctl poweroff"
-Environment=RC_STEERING_GPIO=18
-Environment=RC_ESC_GPIO=13
 Environment=RC_WATCHDOG_TIMEOUT=0.5
 Environment=RC_WIFI_IF=wlan0
 # Delad hemlighet – sätt samma värde i appens Inställningar > Åtkomsttoken.
@@ -25,7 +23,7 @@ Environment=RC_TOKEN=
 Environment=PYTHONUNBUFFERED=1
 Restart=always
 RestartSec=3
-SupplementaryGroups=dialout gpio
+SupplementaryGroups=dialout
 # Port 81 är en privilegierad port (<1024) – tillåt bindning utan att köra som root.
 # gpio-poweroff-overlayen ska vara konfigurerad med gpiopin=26 så STM32 får
 # RPI_POWER_OFF_OK innan REG_5V_EN bryts.

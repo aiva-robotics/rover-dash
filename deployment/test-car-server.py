@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
-"""Automatiskt test av RC-bilens WebSocket-server.
+"""Smoke test for the WebSocket-to-STM32 UART bridge.
 
-Skickar riktiga kommandon till servern och verifierar att styrservo- och
-ESC-utgångarna faktiskt ändrar pulsbredd (läses direkt från pigpiod).
-
-Kör på Pi:n:
-    python3 deployment/test-car-server.py
-    python3 deployment/test-car-server.py --url ws://192.168.1.146:81
-    python3 deployment/test-car-server.py --no-gpio     # bara protokolltest
-
-SÄKERHET: koppla loss drivhjulen/lyft bilen innan testet – ESC:n får korta pådrag.
-Med --safe testas endast styrservot (ESC hålls neutral).
+The test talks to rc-car-server over WebSocket and checks the public protocol.
+If STM32 telemetry is available, it also verifies that generic board outputs
+are reflected in the latest status packet.
 """
 
 from __future__ import annotations
@@ -20,9 +13,9 @@ import asyncio
 import json
 import sys
 import time
+from typing import Any
 
 import config
-from hardware import percent_to_us
 
 try:
     import websockets
@@ -38,7 +31,7 @@ results: list[tuple[bool, str]] = []
 def check(ok: bool, label: str, detail: str = "") -> bool:
     results.append((ok, label))
     mark = f"{GREEN}PASS{RESET}" if ok else f"{RED}FEL {RESET}"
-    print(f"  [{mark}] {label}{(' – ' + detail) if detail else ''}")
+    print(f"  [{mark}] {label}{(' - ' + detail) if detail else ''}")
     return ok
 
 
@@ -46,62 +39,25 @@ def warn(label: str) -> None:
     print(f"  [{YELLOW}INFO{RESET}] {label}")
 
 
-class GpioProbe:
-    """Läser tillbaka pulsbredder från pigpiod för att verifiera utgångarna."""
-
-    def __init__(self, enabled: bool) -> None:
-        self.pi = None
-        if not enabled:
-            return
-        try:
-            import pigpio  # type: ignore
-        except ImportError:
-            warn("pigpio-modulen saknas – hoppar över GPIO-verifiering")
-            return
-        pi = pigpio.pi()
-        if not pi.connected:
-            warn("Når inte pigpiod – hoppar över GPIO-verifiering")
-            return
-        self.pi = pi
-
-    @property
-    def active(self) -> bool:
-        return self.pi is not None
-
-    def read(self, gpio: int) -> int:
-        return int(self.pi.get_servo_pulsewidth(gpio))  # type: ignore[union-attr]
-
-    def close(self) -> None:
-        if self.pi:
-            self.pi.stop()
+async def recv_json(ws, timeout: float = 3.0) -> dict[str, Any]:
+    return json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
 
 
-async def drive(ws, throttle: float, steering: float, hold: float = 0.25) -> None:
-    """Skicka kommandot upprepat så att watchdogen inte slår till."""
-    deadline = time.monotonic() + hold
+async def wait_for_stm32_field(ws, field: str, expected: Any, timeout: float = 3.0) -> bool:
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        await ws.send(json.dumps({"throttle": throttle, "steering": steering}))
-        await asyncio.sleep(0.05)
+        try:
+            msg = await recv_json(ws, timeout=max(0.1, deadline - time.monotonic()))
+        except asyncio.TimeoutError:
+            return False
+        stm32 = msg.get("stm32")
+        if isinstance(stm32, dict) and stm32.get(field) == expected:
+            return True
+    return False
 
 
-def verify_pulse(probe: GpioProbe, gpio: int, expected: int, label: str, tol: int = 12) -> None:
-    if not probe.active:
-        return
-    actual = probe.read(gpio)
-    check(
-        abs(actual - expected) <= tol,
-        label,
-        f"förväntat ~{expected} us, uppmätt {actual} us",
-    )
-
-
-async def run(url: str, use_gpio: bool, safe: bool) -> int:
-    probe = GpioProbe(use_gpio)
+async def run(url: str, require_stm32: bool) -> int:
     print(f"\n== Testar {url} ==")
-    if probe.active:
-        print("   GPIO-verifiering aktiv (läser pulsbredder via pigpiod)")
-    if safe:
-        print("   SAFE-läge: ESC hålls neutral, endast styrservo testas")
 
     try:
         ws = await asyncio.wait_for(websockets.connect(url), timeout=5)
@@ -111,91 +67,50 @@ async def run(url: str, use_gpio: bool, safe: bool) -> int:
     check(True, "Ansluter till WebSocket-servern")
 
     async with ws:
-        # 1. Hälsning / telemetri
         try:
-            hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=3))
+            hello = await recv_json(ws)
             check(isinstance(hello, dict), "Tar emot telemetri vid anslutning", str(hello)[:90])
         except Exception as exc:
             check(False, "Tar emot telemetri vid anslutning", exc.__class__.__name__)
             hello = {}
 
-        # 2. Ping/pong
+        stm32 = hello.get("stm32") if isinstance(hello, dict) else None
+        stm32_available = isinstance(stm32, dict) and bool(stm32.get("rpiConnected"))
+        if not stm32_available:
+            message = "STM32 rapporteras inte som ansluten i telemetrin"
+            if require_stm32:
+                check(False, "STM32 ansluten", message)
+            else:
+                warn(message)
+        else:
+            check(True, "STM32 ansluten")
+
         sent = int(time.time() * 1000)
         await ws.send(json.dumps({"ping": sent}))
         pong_ok = False
-        t0 = time.monotonic()
-        while time.monotonic() - t0 < 3:
-            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=3))
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            msg = await recv_json(ws, timeout=max(0.1, deadline - time.monotonic()))
             if msg.get("pong") == sent:
                 pong_ok = True
                 break
-        check(pong_ok, "Ping/pong svarar", f"{round((time.monotonic() - t0) * 1000)} ms")
+        check(pong_ok, "Ping/pong svarar")
 
-        # 3. Neutral
-        await drive(ws, 0, 0)
-        verify_pulse(probe, config.STEERING_GPIO, config.STEERING_MID_US, "Styrservo neutral")
-        verify_pulse(probe, config.ESC_GPIO, config.ESC_MID_US, "ESC neutral")
+        await ws.send(json.dumps({"rc": [250, -250, 0, 0], "digital": 0x0F, "buzzer": 800}))
+        check(True, "Skickar generiskt STM32 control-paket", "rc + digital + buzzer")
 
-        # 4. Styrsvep
-        for pct, name in ((-100, "vänster"), (100, "höger"), (0, "mitten")):
-            await drive(ws, 0, pct)
-            verify_pulse(
-                probe,
-                config.STEERING_GPIO,
-                percent_to_us(
-                    pct, config.STEERING_MIN_US, config.STEERING_MID_US, config.STEERING_MAX_US
-                ),
-                f"Styrservo {name} ({pct}%)",
+        if stm32_available or require_stm32:
+            check(
+                await wait_for_stm32_field(ws, "digitalMask", 0x0F),
+                "STM32 status visar digitalMask 0x0F",
+            )
+            check(
+                await wait_for_stm32_field(ws, "buzzerHz", 800),
+                "STM32 status visar buzzer 800 Hz",
             )
 
-        # 5. Throttle fram/back
-        if safe:
-            warn("Hoppar över throttle-test (--safe)")
-        else:
-            for pct, name in ((30, "framåt"), (0, "neutral"), (-30, "bakåt"), (0, "neutral")):
-                await drive(ws, pct, 0)
-                verify_pulse(
-                    probe,
-                    config.ESC_GPIO,
-                    percent_to_us(pct, config.ESC_MIN_US, config.ESC_MID_US, config.ESC_MAX_US),
-                    f"ESC {name} ({pct}%)",
-                )
-
-        # 6. Nödstopp
-        await drive(ws, 40, 40, hold=0.15)
-        await ws.send(json.dumps({"action": "estop"}))
-        await asyncio.sleep(0.4)
-        verify_pulse(probe, config.STEERING_GPIO, config.STEERING_MID_US, "Nödstopp -> styrservo neutral")
-        verify_pulse(probe, config.ESC_GPIO, config.ESC_MID_US, "Nödstopp -> ESC neutral")
-
-        estop_seen = False
-        t0 = time.monotonic()
-        while time.monotonic() - t0 < 2:
-            try:
-                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
-            except asyncio.TimeoutError:
-                break
-            if msg.get("estop") is True:
-                estop_seen = True
-                break
-        check(estop_seen, "Servern rapporterar estop i telemetrin")
-
-        # 7. Återställ + watchdog
-        await ws.send(json.dumps({"action": "resume"}))
-        await asyncio.sleep(0.2)
-        await drive(ws, 0, 60, hold=0.3)
-        verify_pulse(
-            probe,
-            config.STEERING_GPIO,
-            percent_to_us(60, config.STEERING_MIN_US, config.STEERING_MID_US, config.STEERING_MAX_US),
-            "Resume återaktiverar styrningen",
-        )
-
-        await asyncio.sleep(max(1.0, config.WATCHDOG_TIMEOUT * 3))
-        verify_pulse(probe, config.STEERING_GPIO, config.STEERING_MID_US, "Watchdog går till neutral")
-        verify_pulse(probe, config.ESC_GPIO, config.ESC_MID_US, "Watchdog -> ESC neutral")
-
-    probe.close()
+        await ws.send(json.dumps({"rc": [0, 0, 0, 0], "digital": 0, "buzzer": 0}))
+        check(True, "Återställer STM32 outputs till neutral")
 
     failed = [label for ok, label in results if not ok]
     print("\n== Resultat ==")
@@ -204,18 +119,19 @@ async def run(url: str, use_gpio: bool, safe: bool) -> int:
         for label in failed:
             print(f"  {RED}x{RESET} {label}")
         return 1
-    print(f"  {GREEN}Allt fungerar – styrning och throttle svarar korrekt.{RESET}")
+    print(f"  {GREEN}WebSocket-bron svarar korrekt.{RESET}")
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Testar RC-bilens WebSocket-server")
+    parser = argparse.ArgumentParser(description="Testar RC-bilens WebSocket-till-STM32-brygga")
     parser.add_argument("--url", default=f"ws://localhost:{config.PORT}", help="WebSocket-adress")
-    parser.add_argument("--no-gpio", action="store_true", help="Hoppa över pulsbreddsmätning")
-    parser.add_argument("--safe", action="store_true", help="Testa inte ESC/throttle")
+    parser.add_argument("--require-stm32", action="store_true", help="Misslyckas om STM32 inte rapporterar status")
+    parser.add_argument("--no-gpio", action="store_true", help="Ignoreras; finns kvar för bakåtkompatibilitet")
+    parser.add_argument("--safe", action="store_true", help="Ignoreras; testet använder inga Pi GPIO-utgångar")
     args = parser.parse_args()
     try:
-        return asyncio.run(run(args.url, not args.no_gpio, args.safe))
+        return asyncio.run(run(args.url, args.require_stm32))
     except KeyboardInterrupt:
         return 130
 

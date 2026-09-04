@@ -32,7 +32,6 @@ import urllib.request
 from urllib.parse import parse_qs, urlparse
 
 import config
-from hardware import clamp
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +66,10 @@ DISPLAY_FRAMEBUFFER_SIZE = 512
 DISPLAY_CHUNK_DATA_SIZE = 63
 DISPLAY_CHUNK_COUNT = 9
 MAX_ENCODED_FRAME_SIZE = MAX_PAYLOAD_SIZE + 6
+
+
+def clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
 
 
 def crc16_ccitt(data: bytes) -> int:
@@ -250,8 +253,6 @@ class STM32Bridge:
         self.rx_synced = False
         self.tx_count = 0
         self.heartbeat_tx_count = 0
-        self.last_steering_us = config.STEERING_MID_US
-        self.last_esc_us = config.ESC_MID_US
 
     def connect(self) -> None:
         if self.simulated:
@@ -317,10 +318,6 @@ class STM32Bridge:
         if 0 <= config.STM32_THROTTLE_RC_OUTPUT < len(rc):
             rc[config.STM32_THROTTLE_RC_OUTPUT] = percent_to_stm32_command(throttle)
         self.rc = rc
-        steering_command = self.rc[config.STM32_STEERING_RC_OUTPUT] if 0 <= config.STM32_STEERING_RC_OUTPUT < len(self.rc) else 0
-        throttle_command = self.rc[config.STM32_THROTTLE_RC_OUTPUT] if 0 <= config.STM32_THROTTLE_RC_OUTPUT < len(self.rc) else 0
-        self.last_steering_us = config.STEERING_MID_US + steering_command // 2
-        self.last_esc_us = config.ESC_MID_US + throttle_command // 2
         self._send_control("control")
 
     def apply_board_control(self, rc=None, digital=None, buzzer=None) -> None:
@@ -334,8 +331,6 @@ class STM32Bridge:
 
     def neutral(self) -> None:
         self.rc = [0, 0, 0, 0]
-        self.last_steering_us = config.STEERING_MID_US
-        self.last_esc_us = config.ESC_MID_US
         self._send_control("neutral")
 
     def _set_digital_bit(self, bit: int, enabled: bool) -> None:

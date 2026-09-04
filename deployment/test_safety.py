@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Enhetstester för de säkerhetskritiska delarna av rc-car-server.
 
-Kräver ingen hårdvara – kör med simulerade PWM-utgångar och fejkade
+Kräver ingen hårdvara – kör med simulerad STM32 UART och fejkade
 WebSocket-objekt.
 
 Kör:
@@ -104,6 +104,9 @@ def reset_state() -> None:
     srv.state.estop = False
     srv.state.failsafe = True
     srv.state.reset_controls()
+    srv.outputs.rc = [0, 0, 0, 0]
+    srv.outputs.digital_mask = 0
+    srv.outputs.buzzer_hz = 0
 
 
 # --- 1. Auth ---------------------------------------------------------------
@@ -134,7 +137,7 @@ def test_estop_ordering() -> None:
     # Kommandon efter estop får aldrig nå utgångarna.
     srv.apply_command(100, 100)
     check(srv.state.throttle == 0, "gas ignoreras medan estop är aktivt")
-    check(srv.outputs.last_esc_us == srv.config.ESC_MID_US, "ESC hålls neutral under estop")
+    check(srv.outputs.rc == [0, 0, 0, 0], "STM32 RC-utgångar hålls neutrala under estop")
 
     srv.handle_action("resume", None)
     check(not srv.state.estop and srv.state.throttle == 0, "resume återställer till neutral")
@@ -174,7 +177,7 @@ async def test_watchdog() -> None:
         await asyncio.sleep(srv.config.WATCHDOG_TIMEOUT + 0.25)
         check(srv.state.failsafe, "watchdog löser ut när kommandon uteblir")
         check(srv.state.throttle == 0, "watchdog nollställer gasen")
-        check(srv.outputs.last_esc_us == srv.config.ESC_MID_US, "watchdog sätter ESC neutral")
+        check(srv.outputs.rc == [0, 0, 0, 0], "watchdog sätter STM32 RC-utgångar neutrala")
     finally:
         task.cancel()
 

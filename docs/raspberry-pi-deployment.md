@@ -315,20 +315,23 @@ curl -I http://localhost:8080/snapshot
 
 ---
 
-## Styrserver: styrservo + ESC (rc-car-server)
+## Styrserver: WebSocket till STM32 UART (rc-car-server)
 
-Pi:n genererar RC-PWM (50 Hz, 1000–2000 µs) direkt till styrservot och ESC:n.
+Pi:n tar emot WebSocket-kommandon från appen och skickar dem vidare till
+STM32-kortet över `/dev/serial0`. STM32-kortet hanterar RC-utgångar,
+digitala utgångar, buzzer, status och OLED.
 
 ### Koppling
 
-| Signal | GPIO (BCM) | Fysisk pin |
+| Signal | Raspberry Pi 3 | STM32 |
 | --- | --- | --- |
-| Styrservo (signal) | GPIO 18 | pin 12 |
-| ESC (signal) | GPIO 13 | pin 33 |
-| GND (båda) | GND | pin 6 / 34 |
+| UART TX | GPIO14 / pin 8 | STM32 UART RX |
+| UART RX | GPIO15 / pin 10 | STM32 UART TX |
+| GND | pin 6 / 9 / 14 / 20 / 25 / 30 / 34 / 39 | GND |
+| Power-off ready | GPIO26 / pin 37 | RPI_POWER_OFF_OK |
 
-Mata **inte** servot från Pi:ns 5V-pin — använd ESC:ns BEC eller separat
-matning, och koppla ihop jorden med Pi:n.
+RC-servon och digitala utgångar kopplas till STM32-kortets utgångar, inte
+direkt till Raspberry Pi GPIO.
 
 ### Installation
 
@@ -336,8 +339,8 @@ matning, och koppla ihop jorden med Pi:n.
 bash scripts/pi-car-server-setup.sh
 ```
 
-Skriptet installerar `pigpio` + `python3-websockets`, startar `pigpiod` och
-installerar tjänsten `rc-car-server` (startar automatiskt vid boot, port 81).
+Skriptet installerar Python/WebSocket/serial-beroenden och tjänsten
+`rc-car-server` (startar automatiskt vid boot, port 81).
 
 Sätt **WebSocket-adress** i inställningarna till `ws://<pi-ip>:81` (eller tryck
 på snabbknappen "Pi WebSocket (samma värd)").
@@ -347,19 +350,19 @@ på snabbknappen "Pi WebSocket (samma värd)").
 - Tar emot `{"throttle": -100..100, "steering": -100..100}` ~20 ggr/s.
 - Svarar `{"pong": ...}` på ping så appen kan mäta latens.
 - Skickar telemetri 5 ggr/s (hastighet, CPU-temp, WiFi-RSSI, status).
-- **Watchdog:** inga kommandon på 0,5 s → gas och styrning till neutral.
+- **Watchdog:** inga kommandon på 0,5 s → generiska RC-kommandon till neutral.
 - **En förare i taget** — en ny klient tar över och den gamla får ett tydligt
   felmeddelande i appen.
-- ESC:n armeras med 2 s neutral vid start.
+- STM32-bron armeras med 2 s neutrala kommandon vid start.
 
-Justera GPIO-pinnar, pulsintervall och timeouts med `sudo systemctl edit --full rc-car-server`.
+Justera UART-port, heartbeat, auth-token och timeouts med
+`sudo systemctl edit --full rc-car-server`.
 
 ### Felsökning
 
 ```bash
 sudo systemctl status rc-car-server
 journalctl -u rc-car-server -f
-systemctl status pigpiod          # måste vara aktiv
 ```
 
 ---
