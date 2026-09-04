@@ -64,6 +64,8 @@ function ControlStation() {
   const [throttleRaw, setThrottleRaw] = useState(0);
   const [steeringRaw, setSteeringRaw] = useState(0);
   const [estop, setEstop] = useState(false);
+  const [lightsOn, setLightsOn] = useState(false);
+  const [hornOn, setHornOn] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
   const videoRef = useRef<VideoFeedHandle | null>(null);
 
