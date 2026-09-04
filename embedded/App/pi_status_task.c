@@ -56,6 +56,15 @@ static const buzzer_note_t rpi_shutdown_ready_tone[] =
   {330u, 260u}
 };
 
+static const char *connected_status_line(void)
+{
+  if ((pi_state != 0) && (pi_state->rpi_ip_address[0] != '\0'))
+  {
+    return pi_state->rpi_ip_address;
+  }
+  return "CONNECTED";
+}
+
 static void set_pi_power(bool enabled)
 {
   HAL_GPIO_WritePin(REG_5V_EN_GPIO_Port, REG_5V_EN_Pin, enabled ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -95,8 +104,7 @@ static void enter_status(pi_status_state_t status, uint32_t now_ms)
       running_offline_displayed = false;
       break;
     case PI_STATUS_RUNNING:
-      display_status("RASPBERRY PI", "CONNECTED");
-      display_restore_previous();
+      display_status("RASPBERRY PI", connected_status_line());
       buzzer_play_sequence(rpi_connected_tone, (uint8_t)(sizeof(rpi_connected_tone) / sizeof(rpi_connected_tone[0])));
       running_offline_displayed = false;
       break;
@@ -223,6 +231,7 @@ void pi_status_task_init(rover_state_t *state, rover_diag_t *diag)
     pi_state->rpi_connected = false;
     pi_state->rpi_poweroff_ok = read_poweroff_ok();
     pi_state->rpi_shutdown_requested = false;
+    pi_state->rpi_ip_address[0] = '\0';
   }
   enter_status(PI_STATUS_BOOT_DELAY, now_ms);
 }
@@ -282,8 +291,7 @@ void pi_status_task(void)
       }
       else if ((pi_state != 0) && pi_state->rpi_connected && running_offline_displayed)
       {
-        display_status("RASPBERRY PI", "CONNECTED");
-        display_restore_previous();
+        display_status("RASPBERRY PI", connected_status_line());
         running_offline_displayed = false;
       }
       if (clicked)

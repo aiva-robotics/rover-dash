@@ -27,7 +27,6 @@ os.environ.setdefault("RC_SIMULATE", "1")
 os.environ["RC_TOKEN"] = "hemlig-token"
 os.environ["RC_WATCHDOG_TIMEOUT"] = "0.2"
 os.environ["RC_WATCHDOG_INTERVAL"] = "0.05"
-os.environ["RC_MAX_THROTTLE"] = "80"
 
 _spec = importlib.util.spec_from_file_location("rc_car_server", HERE / "rc-car-server.py")
 srv = importlib.util.module_from_spec(_spec)
@@ -127,43 +126,40 @@ def test_auth() -> None:
 def test_estop_ordering() -> None:
     print("\nNödstopp:")
     reset_state()
-    srv.apply_command(50, 20)
-    check(abs(srv.state.throttle - 50) < 0.01, "gas släpps igenom i normalläge")
+    srv.apply_generic_control([500, -250, 0, 0], 0x05, 900)
+    check(srv.outputs.rc == [500, -250, 0, 0], "generiska RC-kommandon släpps igenom i normalläge")
+    check(srv.outputs.digital_mask == 0x05, "digital mask släpps igenom i normalläge")
+    check(srv.outputs.buzzer_hz == 900, "buzzer släpps igenom i normalläge")
 
     srv.handle_action("estop", None)
     check(srv.state.estop, "estop sätter estop-flaggan")
-    check(srv.state.throttle == 0 and srv.state.steering == 0, "estop nollställer kommandon")
+    check(srv.outputs.rc == [0, 0, 0, 0], "estop nollställer RC-kommandon")
+    check(srv.outputs.digital_mask == 0, "estop nollställer digitala utgångar")
+    check(srv.outputs.buzzer_hz == 0, "estop nollställer buzzer")
 
     # Kommandon efter estop får aldrig nå utgångarna.
-    srv.apply_command(100, 100)
-    check(srv.state.throttle == 0, "gas ignoreras medan estop är aktivt")
+    srv.apply_generic_control([1000, 1000, 1000, 1000], 0x0F, 1200)
     check(srv.outputs.rc == [0, 0, 0, 0], "STM32 RC-utgångar hålls neutrala under estop")
+    check(srv.outputs.digital_mask == 0, "digitala utgångar hålls av under estop")
 
     srv.handle_action("resume", None)
-    check(not srv.state.estop and srv.state.throttle == 0, "resume återställer till neutral")
+    check(not srv.state.estop and srv.outputs.rc == [0, 0, 0, 0], "resume återställer till neutral")
 
-    # Estop + gas i samma paket: estop hanteras först i handler-loopen.
+    # Estop + kontroll i samma paket: estop hanteras först i handler-loopen.
     reset_state()
-    data = {"estop": True, "throttle": 100, "steering": 100}
+    data = {"estop": True, "rc": [1000, 1000, 1000, 1000], "digital": 0x0F}
     if "estop" in data and bool(data["estop"]) != srv.state.estop:
         srv.handle_action("estop", None)
-    srv.apply_command(data["throttle"], data["steering"])
-    check(srv.state.throttle == 0, "estop+gas i samma paket ger noll gas")
-
-    reset_state()
-    srv.apply_command(100, 0)
-    check(
-        abs(srv.state.throttle - srv.config.MAX_THROTTLE) < 0.01,
-        "MAX_THROTTLE begränsar gasen serverside",
-        f"throttle={srv.state.throttle}",
-    )
+    srv.apply_generic_control(data["rc"], data["digital"], None)
+    check(srv.outputs.rc == [0, 0, 0, 0], "estop+kontroll i samma paket ger neutrala RC-utgångar")
+    check(srv.outputs.digital_mask == 0, "estop+kontroll i samma paket ger avstängda digitala utgångar")
 
 
 # --- 3. Watchdog -----------------------------------------------------------
 async def test_watchdog() -> None:
     print("\nWatchdog:")
     reset_state()
-    srv.apply_command(60, 0)
+    srv.apply_generic_control([600, 0, 0, 0], None, None)
     check(not srv.state.failsafe, "failsafe avaktiveras vid kommando")
 
     task = asyncio.create_task(srv.watchdog())
@@ -171,12 +167,11 @@ async def test_watchdog() -> None:
         # Håll den vid liv en stund.
         for _ in range(4):
             await asyncio.sleep(0.05)
-            srv.apply_command(60, 0)
+            srv.apply_generic_control([600, 0, 0, 0], None, None)
         check(not srv.state.failsafe, "watchdog löser inte ut vid regelbundna kommandon")
 
         await asyncio.sleep(srv.config.WATCHDOG_TIMEOUT + 0.25)
         check(srv.state.failsafe, "watchdog löser ut när kommandon uteblir")
-        check(srv.state.throttle == 0, "watchdog nollställer gasen")
         check(srv.outputs.rc == [0, 0, 0, 0], "watchdog sätter STM32 RC-utgångar neutrala")
     finally:
         task.cancel()
@@ -194,7 +189,7 @@ async def test_single_driver_race() -> None:
     a = FakeWS(token="hemlig-token", session="sess-a", delay=0.05)
     b = FakeWS(token="hemlig-token", session="sess-b", delay=0.05)
     for ws in (a, b):
-        ws.feed({"throttle": 10, "steering": 0})
+        ws.feed({"rc": [100, 0, 0, 0]})
         ws.eof()
 
     await asyncio.gather(srv.handler(a), srv.handler(b))

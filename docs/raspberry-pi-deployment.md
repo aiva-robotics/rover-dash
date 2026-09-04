@@ -347,7 +347,9 @@ på snabbknappen "Pi WebSocket (samma värd)").
 
 ### Beteende
 
-- Tar emot `{"throttle": -100..100, "steering": -100..100}` ~20 ggr/s.
+- Tar emot generiska STM32-kommandon:
+  `{"rc": [0, 0, 0, 0], "digital": 0, "buzzer": 0}`.
+- Mappning av joystick, servo, motor, lampor och buzzer görs i webbappen.
 - Svarar `{"pong": ...}` på ping så appen kan mäta latens.
 - Skickar telemetri 5 ggr/s (hastighet, CPU-temp, WiFi-RSSI, status).
 - **Watchdog:** inga kommandon på 0,5 s → generiska RC-kommandon till neutral.
@@ -410,13 +412,8 @@ Nya miljövariabler för `rc-car-server.service`:
 
 | Variabel | Standard | Beskrivning |
 | --- | --- | --- |
-| `RC_LIGHTS_GPIO` | `23` | GPIO för strålkastare (-1 = av) |
-| `RC_HORN_GPIO` | `24` | GPIO för tuta/summer (-1 = av) |
-| `RC_LIGHTS_ACTIVE_LOW` / `RC_HORN_ACTIVE_LOW` | `false` | Sätt `true` för reläkort som är aktiva låga |
-| `RC_HORN_SECONDS` | `0.6` | Pipets längd |
 | `RC_SNAPSHOT_URL` | `http://127.0.0.1:8080/snapshot` | Källa för "Ta bild" |
 | `RC_PHOTO_DIR` | `/var/lib/rc-car/photos` | Där bilder sparas |
-| `RC_MAX_THROTTLE` | `100` | Serversidigt hastighetstak i procent |
 
 Åtkomsttoken skickas numera i WebSocket-handskakningen (`Sec-WebSocket-Protocol`)
 istället för i URL:en, så den hamnar inte i nginx- eller proxyloggar. Servern

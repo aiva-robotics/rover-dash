@@ -150,6 +150,24 @@ static void handle_packet(const protocol_packet_t *packet)
       }
     }
   }
+  else if (packet->type == PROTOCOL_MSG_RPI_INFO)
+  {
+    if ((uart_state == 0) || (packet->payload_length >= ROVER_RPI_IP_ADDRESS_LENGTH))
+    {
+      if (uart_diag != 0)
+      {
+        uart_diag->uart_length_errors++;
+      }
+      return;
+    }
+
+    memcpy(uart_state->rpi_ip_address, packet->payload, packet->payload_length);
+    uart_state->rpi_ip_address[packet->payload_length] = '\0';
+    if (uart_state->rpi_connected)
+    {
+      display_status("RASPBERRY PI", uart_state->rpi_ip_address);
+    }
+  }
 }
 
 static void count_protocol_error(protocol_status_t status)

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #define ROVER_ANALOG_INPUT_COUNT 4u
+#define ROVER_RPI_IP_ADDRESS_LENGTH 16u
 
 typedef struct
 {
@@ -35,6 +36,7 @@ typedef struct
   bool rpi_shutdown_requested;
   bool failsafe_active;
   uint8_t rpi_status;
+  char rpi_ip_address[ROVER_RPI_IP_ADDRESS_LENGTH];
 } rover_state_t;
 
 typedef struct

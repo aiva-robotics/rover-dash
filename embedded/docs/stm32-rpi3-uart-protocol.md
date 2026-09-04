@@ -72,6 +72,7 @@ Output byte order: little-endian
 0x02 RPI_SHUTDOWN  STM32 -> Raspberry Pi
 0x03 DISPLAY_DATA  Raspberry Pi -> STM32
 0x04 DISPLAY_UPDATE Raspberry Pi -> STM32
+0x05 RPI_INFO      Raspberry Pi -> STM32
 0x80 STATUS        STM32 -> Raspberry Pi
 0x81 DIAGNOSTICS   Reserved/optional
 ```
@@ -268,6 +269,46 @@ The Raspberry Pi does not need to retransmit the framebuffer after a temporary S
 The Raspberry Pi should keep the periodic `CONTROL` stream running while sending display chunks. Display packets count as Raspberry Pi communication, but they do not refresh the output-control failsafe timer.
 
 At `115200 baud`, one full-size encoded display chunk takes roughly `6 ms` on the UART line. The STM32 UART receive path is sized to accept a complete 9-chunk display burst, but the Raspberry Pi should still serialize writes in order and avoid overlapping writes from multiple async producers.
+
+## RPI_INFO Packet
+
+Direction:
+
+```text
+Raspberry Pi -> STM32
+```
+
+Message type:
+
+```text
+0x05
+```
+
+Payload length:
+
+```text
+1..15 bytes
+```
+
+Payload layout:
+
+```text
+0..N: Raspberry Pi IPv4 address as ASCII text, without NUL terminator
+```
+
+Example payload:
+
+```text
+31 39 32 2E 31 36 38 2E 31 2E 34 32
+```
+
+This represents:
+
+```text
+192.168.1.42
+```
+
+The Raspberry Pi should send this packet after opening the UART and whenever the active IP address changes. The STM32 stores the address and displays it on the connected Raspberry Pi status screen.
 
 ## STATUS Packet
 

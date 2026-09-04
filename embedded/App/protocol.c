@@ -55,6 +55,7 @@ static bool protocol_is_known_type(uint8_t type)
          (type == PROTOCOL_MSG_RPI_SHUTDOWN) ||
          (type == PROTOCOL_MSG_DISPLAY_DATA) ||
          (type == PROTOCOL_MSG_DISPLAY_UPDATE) ||
+         (type == PROTOCOL_MSG_RPI_INFO) ||
          (type == PROTOCOL_MSG_STATUS) ||
          (type == PROTOCOL_MSG_DIAGNOSTICS);
 }

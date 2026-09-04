@@ -325,7 +325,6 @@ void HAL_I2C_MspDeInit(I2C_HandleTypeDef* hi2c)
     /* I2C1 interrupt DeInit */
     HAL_NVIC_DisableIRQ(I2C1_EV_IRQn);
     HAL_NVIC_DisableIRQ(I2C1_ER_IRQn);
-
     /* USER CODE BEGIN I2C1_MspDeInit 1 */
 
     /* USER CODE END I2C1_MspDeInit 1 */
@@ -367,7 +366,7 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base)
     */
     GPIO_InitStruct.Pin = SPEED_SENSOR_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
     HAL_GPIO_Init(SPEED_SENSOR_GPIO_Port, &GPIO_InitStruct);
@@ -615,7 +614,6 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
     HAL_GPIO_DeInit(GPIOB, UART_TX_Pin|UART_RX_Pin);
 
     /* USART2 DMA DeInit */
-    HAL_DMA_DeInit(huart->hdmarx);
     HAL_DMA_DeInit(huart->hdmatx);
 
     /* USART2 interrupt DeInit */

@@ -52,13 +52,16 @@ Kommunikation:
 
 - Använd WebSocket.
 
-- Skicka styrkommandon kontinuerligt i JSON-format:
+- Skicka generiska STM32-kommandon kontinuerligt i JSON-format. Appen ansvarar
+  för att mappa joystick/reglage till rätt RC-utgångar:
 
 {
 
-  "throttle": -100,
+  "rc": [0, 0, 0, 0],
 
-  "steering": 50
+  "digital": 0,
+
+  "buzzer": 0
 
 }
 

@@ -2,12 +2,11 @@
 """WebSocket-to-STM32 UART bridge for the RC car on Raspberry Pi.
 
 Protokoll (matchar webbappens useCarSocket):
-  in : {"throttle": -100..100, "steering": -100..100}
   in : {"ping": <ms-timestamp>}            -> ut: {"pong": <samma>}
-  in : {"action": "estop"|"resume"|"headlights"|"horn"|"photo", "value": ...}
+  in : {"action": "estop"|"resume"|"photo", "value": ...}
   in : {"rc": [..4 values -1000..1000], "digital": 0..15, "buzzer": 0..65535}
   in : {"action": "oled", "value": {"base64"|"hex"|"framebuffer": <512 bytes>}}
-  ut : {"speed":..,"rssi":..,"temperature":..,"heading":..,"headlights":..,
+  ut : {"speed":..,"rssi":..,"temperature":..,"heading":..,
         "recording":..,"estop":..,"armed":..,"stm32": {...}}
 
 Kör:  python3 rc-car-server.py
@@ -24,6 +23,7 @@ import hmac
 import os
 import shlex
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -57,6 +57,7 @@ MSG_CONTROL = 0x01
 MSG_RPI_SHUTDOWN = 0x02
 MSG_DISPLAY_DATA = 0x03
 MSG_DISPLAY_UPDATE = 0x04
+MSG_RPI_INFO = 0x05
 MSG_STATUS = 0x80
 
 MAX_PAYLOAD_SIZE = 64
@@ -204,10 +205,6 @@ def parse_status_payload(payload: bytes) -> dict:
     }
 
 
-def percent_to_stm32_command(value: float) -> int:
-    return int(round(clamp(value, -100.0, 100.0) * 10.0))
-
-
 def _int_auto(value, default: int = 0) -> int:
     try:
         if isinstance(value, str):
@@ -236,8 +233,36 @@ def _decode_bytes_value(value) -> bytes:
     raise ValueError("expected framebuffer as byte list, hex string, or base64 string")
 
 
+def local_ip_address() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            address = sock.getsockname()[0]
+            if address and not address.startswith("127."):
+                return address
+    except OSError:
+        pass
+
+    try:
+        output = subprocess.check_output(["hostname", "-I"], text=True, timeout=1.0)
+        for address in output.split():
+            if address and not address.startswith("127.") and ":" not in address:
+                return address
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    try:
+        for address in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if address and not address.startswith("127."):
+                return address
+    except OSError:
+        pass
+
+    return "0.0.0.0"
+
+
 class STM32Bridge:
-    """STM32 UART protocol bridge with the same surface as the old RCOutputs."""
+    """Generic STM32 UART protocol bridge."""
 
     def __init__(self) -> None:
         self.simulated = config.SIMULATE
@@ -253,6 +278,7 @@ class STM32Bridge:
         self.rx_synced = False
         self.tx_count = 0
         self.heartbeat_tx_count = 0
+        self.last_sent_ip = ""
 
     def connect(self) -> None:
         if self.simulated:
@@ -273,6 +299,7 @@ class STM32Bridge:
         self.neutral()
         log.info("Armerar STM32 bridge (%.1f s neutral)...", config.ARM_SECONDS)
         time.sleep(config.ARM_SECONDS)
+        self.send_rpi_info()
         self.armed = True
         log.info("STM32 bridge armerad")
 
@@ -309,17 +336,6 @@ class STM32Bridge:
             raise RuntimeError("internal CONTROL payload size mismatch")
         self._write_frame(encode_packet(MSG_CONTROL, bytes(payload)), label)
 
-    def apply(self, throttle: float, steering: float) -> None:
-        if abs(throttle) < config.ESC_DEADBAND:
-            throttle = 0.0
-        rc = [0, 0, 0, 0]
-        if 0 <= config.STM32_STEERING_RC_OUTPUT < len(rc):
-            rc[config.STM32_STEERING_RC_OUTPUT] = percent_to_stm32_command(steering)
-        if 0 <= config.STM32_THROTTLE_RC_OUTPUT < len(rc):
-            rc[config.STM32_THROTTLE_RC_OUTPUT] = percent_to_stm32_command(throttle)
-        self.rc = rc
-        self._send_control("control")
-
     def apply_board_control(self, rc=None, digital=None, buzzer=None) -> None:
         if isinstance(rc, list) and len(rc) == 4:
             self.rc = [int(clamp(float(value), -1000, 1000)) for value in rc]
@@ -333,27 +349,6 @@ class STM32Bridge:
         self.rc = [0, 0, 0, 0]
         self._send_control("neutral")
 
-    def _set_digital_bit(self, bit: int, enabled: bool) -> None:
-        if not 0 <= bit <= 3:
-            return
-        if enabled:
-            self.digital_mask |= 1 << bit
-        else:
-            self.digital_mask &= ~(1 << bit)
-        self._send_control("digital")
-
-    def set_lights(self, on: bool) -> None:
-        self._set_digital_bit(config.STM32_LIGHTS_OUTPUT_BIT, on)
-        log.info("STM32 digital bit %s -> %s", config.STM32_LIGHTS_OUTPUT_BIT, on)
-
-    def horn(self, seconds: float | None = None) -> None:
-        duration = config.HORN_SECONDS if seconds is None else float(seconds)
-        self.buzzer_hz = config.STM32_HORN_BUZZER_HZ
-        self._send_control("buzzer-on")
-        time.sleep(max(0.05, min(3.0, duration)))
-        self.buzzer_hz = 0
-        self._send_control("buzzer-off")
-
     def accessories_off(self) -> None:
         self.digital_mask = 0
         self.buzzer_hz = 0
@@ -361,6 +356,15 @@ class STM32Bridge:
 
     def fail_safe(self) -> None:
         self.neutral()
+
+    def send_rpi_info(self, force: bool = False) -> None:
+        address = local_ip_address()
+        if (not force) and (address == self.last_sent_ip):
+            return
+        payload = address.encode("ascii", errors="ignore")[:15]
+        self._write_frame(encode_packet(MSG_RPI_INFO, payload), "rpi-info")
+        self.last_sent_ip = address
+        log.info("STM32 RPI info TX: ip=%s", address)
 
     def send_oled_framebuffer(self, framebuffer: bytes, chunk_delay: float = 0.0) -> None:
         if len(framebuffer) != DISPLAY_FRAMEBUFFER_SIZE:
@@ -410,18 +414,15 @@ class STM32Bridge:
 
 class CarState:
     def __init__(self) -> None:
-        self.throttle = 0.0
-        self.steering = 0.0
         self.last_command = 0.0
         self.estop = False
-        self.headlights = False
         self.recording = False
         self.heading = 0.0
         self.failsafe = True
 
     def reset_controls(self) -> None:
-        self.throttle = 0.0
-        self.steering = 0.0
+        outputs.neutral()
+        outputs.accessories_off()
 
 
 state = CarState()
@@ -517,9 +518,8 @@ async def system_stats_loop() -> None:
 
 def telemetry() -> dict:
     payload = {
-        "speed": round(abs(state.throttle) * config.SPEED_FACTOR, 1),
+        "speed": 0.0,
         "heading": round(state.heading, 1),
-        "headlights": state.headlights,
         "recording": state.recording,
         "estop": state.estop,
         "armed": outputs.armed,
@@ -536,30 +536,14 @@ def telemetry() -> dict:
 
 
 # --- Kommandohantering ------------------------------------------------------
-def _coerce_percent(value, default: float, label: str) -> float:
-    if isinstance(value, bool):
-        log.warning("Ignorerar ogiltigt %s-värde: bool", label)
-        return default
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        log.warning("Ignorerar ogiltigt %s-värde: %r", label, value)
-        return default
-
-
-def apply_command(throttle: float, steering: float) -> None:
-    limit = clamp(config.MAX_THROTTLE, 0.0, 100.0)
+def apply_generic_control(rc=None, digital=None, buzzer=None) -> None:
     state.last_command = time.monotonic()
     state.failsafe = False
     if state.estop:
-        # Under nödstopp får inget kommando lagras eller nå utgångarna – annars
-        # rapporterar telemetrin gas som inte finns och ett resume kan rycka till.
+        # Under nodstopp far inget kommando lagras eller na utgangarna.
         state.reset_controls()
-        outputs.neutral()
         return
-    state.throttle = clamp(_coerce_percent(throttle, 0.0, "throttle"), -limit, limit)
-    state.steering = clamp(_coerce_percent(steering, 0.0, "steering"), -100.0, 100.0)
-    outputs.apply(state.throttle, state.steering)
+    outputs.apply_board_control(rc, digital, buzzer)
 
 
 
@@ -583,9 +567,6 @@ def take_photo() -> str | None:
 async def handle_action_async(action: str, value, websocket) -> None:
     """Åtgärder som kan blockera körs i en tråd."""
     loop = asyncio.get_running_loop()
-    if action == "horn":
-        await loop.run_in_executor(None, outputs.horn, None)
-        return
     if action in ("oled", "display", "display_update"):
         try:
             framebuffer = _decode_bytes_value(value)
@@ -619,20 +600,11 @@ def handle_action(action: str, value) -> None:
     if action == "estop":
         state.estop = True
         state.reset_controls()
-        outputs.fail_safe()
-        outputs.accessories_off()
-        state.headlights = False
         log.warning("NÖDSTOPP aktiverat av klient")
     elif action == "resume":
         state.estop = False
         state.reset_controls()
-        outputs.neutral()
         log.info("Nödstopp återställt")
-    elif action == "headlights":
-        state.headlights = bool(value) if value is not None else not state.headlights
-        outputs.set_lights(state.headlights)
-    elif action == "horn":
-        outputs.horn()
     else:
         log.info("Okänt kommando: %s", action)
 
@@ -645,7 +617,6 @@ async def watchdog() -> None:
             continue
         if time.monotonic() - state.last_command > config.WATCHDOG_TIMEOUT:
             state.reset_controls()
-            outputs.fail_safe()
             state.failsafe = True
             log.warning("Watchdog: inga kommandon – går till neutral")
 
@@ -681,6 +652,7 @@ async def stm32_heartbeat_loop() -> None:
     while True:
         try:
             await asyncio.sleep(interval)
+            await asyncio.get_running_loop().run_in_executor(None, outputs.send_rpi_info)
             await asyncio.get_running_loop().run_in_executor(None, outputs._send_control, "heartbeat")
             outputs.heartbeat_tx_count += 1
             if outputs.heartbeat_tx_count <= 3 or (outputs.heartbeat_tx_count % 10) == 0:
@@ -878,11 +850,8 @@ async def handler(websocket) -> None:
                 if requested != state.estop:
                     handle_action("estop" if requested else "resume", None)
 
-            if "throttle" in data or "steering" in data:
-                apply_command(data.get("throttle", 0), data.get("steering", 0))
-
             if "rc" in data or "digital" in data or "buzzer" in data:
-                outputs.apply_board_control(data.get("rc"), data.get("digital"), data.get("buzzer"))
+                apply_generic_control(data.get("rc"), data.get("digital"), data.get("buzzer"))
 
             if "ping" in data:
                 try:
@@ -908,9 +877,6 @@ async def handler(websocket) -> None:
             driver_info["label"] = ""
             driver_info["since"] = None
             state.reset_controls()
-            outputs.fail_safe()
-            outputs.accessories_off()
-            state.headlights = False
             state.failsafe = True
         log.info("Klient frånkopplad: %s – bilen i neutral", peer[0])
 
