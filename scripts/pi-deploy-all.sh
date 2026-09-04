@@ -56,11 +56,14 @@ install_service() {
 }
 
 # --- 4. Kamera / styrserver ------------------------------------------------
-[ "$WITH_CAMERA" = "1" ] && install_service "pi-camera" "deployment/pi-camera.service"
+if [ "$WITH_CAMERA" = "1" ]; then
+  install_service "pi-camera" "deployment/pi-camera.service"
+  install_service "pi-camera-watchdog" "deployment/pi-camera-watchdog.service"
+fi
 [ "$WITH_CAR_SERVER" = "1" ] && install_service "rc-car-server" "deployment/rc-car-server.service"
 
 sudo systemctl daemon-reload
-for svc in pi-camera rc-car-server; do
+for svc in pi-camera pi-camera-watchdog rc-car-server; do
   if [ -f "/etc/systemd/system/$svc.service" ]; then
     sudo systemctl restart "$svc" || true
   fi
@@ -72,7 +75,7 @@ IP="$(hostname -I | awk '{print $1}')"
 echo
 echo "================ STATUS ================"
 FAILED=0
-for svc in rc-control pi-camera rc-car-server; do
+for svc in rc-control pi-camera pi-camera-watchdog rc-car-server; do
   [ -f "/etc/systemd/system/$svc.service" ] || continue
   if systemctl is-active --quiet "$svc"; then
     printf "  %-16s OK\n" "$svc"
